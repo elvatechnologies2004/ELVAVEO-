@@ -42,9 +42,9 @@ export default function Footer() {
                 <Image
                   src={BRAND_LOGO}
                   alt={SITE_NAME}
-                  width={130}
-                  height={49}
-                  sizes="130px"
+                  width={126}
+                  height={46}
+                  sizes="126px"
                   className="h-[46px] w-auto object-contain"
                 />
               </Link>

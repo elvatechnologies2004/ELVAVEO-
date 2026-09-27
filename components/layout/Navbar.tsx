@@ -70,10 +70,10 @@ export default function Navbar() {
           <Image
             src={BRAND_LOGO}
             alt="ELVAVEO"
-            width={138}
+            width={142}
             height={52}
             priority
-            sizes="138px"
+            sizes="142px"
             className="h-[52px] w-auto object-contain"
           />
         </Link>
