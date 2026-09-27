@@ -18,8 +18,20 @@ export const SITE_AUTHOR = "ELVAVEO";
 /** Inbox that receives contact form submissions. */
 export const CONTACT_EMAIL = "hello@elvaveo.com";
 
-/** Brand logo used for the navbar, footer, and app icons. */
-export const BRAND_LOGO = "/brand/elvaveo-logo.png";
+/**
+ * Brand logo used in the navbar and footer.
+ *
+ * The 8-character suffix is the first 8 hex digits of the file's SHA-256, so
+ * the URL changes whenever the artwork does. Without it the path stays the
+ * same across a logo swap and browsers keep serving the old image from cache -
+ * the Next.js image optimizer serves it with a 4 hour freshness window, so a
+ * rebrand would stay invisible to returning visitors.
+ *
+ * To swap the logo: run scripts/crop-brand-mark.ps1, rename the result to
+ * elvaveo-logo.<new-hash>.png and update this line. The navbar and footer read
+ * it from here, so nothing else needs editing.
+ */
+export const BRAND_LOGO = "/brand/elvaveo-logo.3d7b3289.png";
 
 /** Social sharing image (1200x630). */
 export const OG_IMAGE = "/og-image.png";
