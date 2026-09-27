@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/* ============================================================
+   ELVAVEO design tokens
+   ============================================================ */
+:root {
+  --navy: #081b3d;
+  --navy-2: #102a5c;
+  --blue: #2563ff;
+  --cyan: #22d3ee;
+  --violet: #7c3aed;
+  --soft-blue: #becbff;
+  --ice: #f4f7fd;
+  --surface: rgba(255, 255, 255, 0.8);
+  --surface-strong: rgba(255, 255, 255, 0.9);
+  --border: rgba(130, 160, 220, 0.24);
+  --muted: #61708f;
+  --white: #ffffff;
+  --gradient-main: linear-gradient(90deg, #13b8ff 0%, #356dff 48%, #8a2be2 100%);
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-navy-2: var(--navy-2);
+  --color-blue: var(--blue);
+  --color-cyan: var(--cyan);
+  --color-violet: var(--violet);
+  --color-soft-blue: var(--soft-blue);
+  --color-ice: var(--ice);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-line: var(--border);
+  --color-muted: var(--muted);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --breakpoint-3xl: 120rem;
+
+  --shadow-card: 0 18px 50px rgba(42, 83, 150, 0.1);
+  --shadow-card-lg: 0 28px 70px -24px rgba(35, 75, 140, 0.2);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--ice);
+    color: var(--navy);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(37, 99, 255, 0.18);
+    color: var(--navy);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* ============================================================
+   Reusable component classes
+   ============================================================ */
+@layer components {
+  .glass {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .glass-strong {
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+
+  .bg-gradient-main {
+    background-image: var(--gradient-main);
+  }
+
+  .text-gradient {
+    background-image: var(--gradient-main);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+
+  .eyebrow::before {
+    content: "";
+    height: 2px;
+    width: 28px;
+    border-radius: 9999px;
+    background-image: var(--gradient-main);
+    flex-shrink: 0;
+  }
+
+  .eyebrow-light {
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  .eyebrow-light::before {
+    background-image: var(--gradient-main);
+    opacity: 0.9;
+  }
+}
+
+/* ------------------------------------------------------------
+   Subtle floating animation used by hero info cards
+   ------------------------------------------------------------ */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+.animate-float-soft {
+  animation: float-soft 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-soft {
+    animation: none;
+  }
+}

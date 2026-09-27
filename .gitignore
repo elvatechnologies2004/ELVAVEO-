@@ -1,0 +1,42 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+/next-env.d.ts
+
+# production
+/build
+
+# local scratch scripts (not part of the site)
+/_local
+
+# personal editor / tooling config
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files — secrets must never be committed
+.env
+.env.*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+
+# vercel
+.vercel
+
+# misc
+Thumbs.db

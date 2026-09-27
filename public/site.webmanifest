@@ -1,0 +1,32 @@
+{
+  "name": "ELVAVEO",
+  "short_name": "ELVAVEO",
+  "description": "ELVAVEO builds modern software, SaaS products, web experiences and digital solutions, including Finlo and FinloNexa CRM.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fd",
+  "theme_color": "#081b3d",
+  "lang": "en-US",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
