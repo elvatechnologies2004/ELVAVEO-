@@ -27,7 +27,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — secrets must never be committed
+# env files — secrets must never be committed.
+# Order matters: git applies the LAST matching pattern, so the negation for
+# the committed template must stay below every pattern that would catch it.
+# `vercel link` appends a blanket `.env*`, which silently overrides the
+# negation above and drops .env.example from the repo — re-check this file
+# after running vercel link.
 .env
 .env.*
 !.env.example
