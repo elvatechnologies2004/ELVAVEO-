@@ -27,6 +27,9 @@ export default function ContactForm() {
   // Honeypot: parked off-screen, so a real person never sees or fills it.
   const [company, setCompany] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // True when delivery itself is down (503), so the visitor is shown a
+  // clickable address instead of a dead end.
+  const [emailFallback, setEmailFallback] = useState(false);
   const [status, setStatus] = useState<ContactFormStatus>("idle");
 
   const sending = status === "sending";
@@ -44,6 +47,7 @@ export default function ContactForm() {
     }
 
     setError(null);
+    setEmailFallback(false);
     setStatus("sending");
 
     try {
@@ -61,6 +65,7 @@ export default function ContactForm() {
 
       if (!response.ok || !payload?.success) {
         setStatus("error");
+        setEmailFallback(response.status === 503);
         setError(
           payload?.error ??
             payload?.message ??
@@ -210,9 +215,22 @@ export default function ContactForm() {
       </div>
 
       {error && status === "error" && (
-        <p role="alert" className="text-[13px] font-semibold text-[#c2410c]">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="grid gap-1.5 text-[13px] font-semibold text-[#c2410c]"
+        >
+          <p>{error}</p>
+          {emailFallback && (
+            <a
+              href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+                `[${subject}] ${name.trim()}`
+              )}&body=${encodeURIComponent(message.trim())}`}
+              className="w-fit font-semibold text-blue underline underline-offset-2 hover:no-underline"
+            >
+              {CONTACT_EMAIL}
+            </a>
+          )}
+        </div>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

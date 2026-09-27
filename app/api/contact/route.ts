@@ -93,11 +93,14 @@ export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-    // Logged server-side only. The visitor just gets a safe fallback.
+    // Logged server-side only. The visitor gets a safe, actionable message and
+    // the client turns the 503 into a clickable mailto link. The email address
+    // is deliberately left out of the string so the UI can render it as a real
+    // link rather than dead text.
     console.error("[contact] RESEND_API_KEY is missing - email not sent.");
     return fail(
-      `Email delivery is not configured yet. Please write to ${DEFAULT_CONTACT_EMAIL} directly.`,
-      500
+      "Our contact form is temporarily unavailable. Please email us directly using the link below.",
+      503
     );
   }
 
