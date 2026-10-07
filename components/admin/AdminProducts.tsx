@@ -17,6 +17,7 @@ import {
   Upload,
   Image as ImageIcon,
   Trash2,
+  Edit2,
   AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,10 +30,12 @@ export default function AdminProducts() {
   const [isUploading, setIsUploading] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  const [isDrafting, setIsDrafting] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [draftProduct, setDraftProduct] = useState({
     name: "",
-    category: "AI & Automation",
+    category: "EdTech & AI",
     headlineLine1: "",
     headlineLine2: "",
     description: "",
@@ -73,6 +76,42 @@ export default function AdminProducts() {
     fetchProducts();
   }, []);
 
+  const openAddModal = () => {
+    setEditingId(null);
+    setDraftProduct({
+      name: "",
+      category: "EdTech & AI",
+      headlineLine1: "",
+      headlineLine2: "",
+      description: "",
+      url: "",
+      logo: "/brand/camvia-logo.svg",
+      stats1Label: "Operational Efficiency",
+      stats1Value: "+45%",
+      stats2Label: "AI Insights",
+      stats2Value: "Real-Time",
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (prod: Product) => {
+    setEditingId(prod.id);
+    setDraftProduct({
+      name: prod.name,
+      category: prod.category,
+      headlineLine1: prod.headline?.[0] || prod.name,
+      headlineLine2: prod.headline?.[1] || "",
+      description: prod.description,
+      url: prod.href,
+      logo: prod.logo || "/brand/elvaveo-logo.3d7b3289.png",
+      stats1Label: prod.stats?.[0]?.label || "Metric 1",
+      stats1Value: prod.stats?.[0]?.value || "100%",
+      stats2Label: prod.stats?.[1]?.label || "Metric 2",
+      stats2Value: prod.stats?.[1]?.value || "Real-Time",
+    });
+    setIsModalOpen(true);
+  };
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -108,7 +147,7 @@ export default function AdminProducts() {
     }
   };
 
-  const handleAddDraft = async (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = draftProduct.name.trim();
     const trimmedDesc = draftProduct.description.trim();
@@ -126,10 +165,10 @@ export default function AdminProducts() {
       finalUrl = `https://${finalUrl}`;
     }
 
-    const slugId = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "-") || `custom-${Date.now()}`;
+    const targetId = editingId || trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "-") || `custom-${Date.now()}`;
 
-    const newProd: Product = {
-      id: slugId,
+    const prodPayload: Product = {
+      id: targetId,
       name: trimmedName,
       logo: draftProduct.logo || "/brand/elvaveo-logo.3d7b3289.png",
       badge: "An ELVAVEO Product",
@@ -159,11 +198,11 @@ export default function AdminProducts() {
       href: finalUrl,
     };
 
-    // Replace if id matches or append
-    const existingIndex = productList.findIndex((p) => p.id === newProd.id);
+    // Replace if existing or append
+    const existingIndex = productList.findIndex((p) => p.id === targetId);
     const updated = existingIndex >= 0
-      ? productList.map((p, idx) => (idx === existingIndex ? newProd : p))
-      : [...productList, newProd];
+      ? productList.map((p, idx) => (idx === existingIndex ? prodPayload : p))
+      : [...productList, prodPayload];
 
     setIsSaving(true);
     try {
@@ -177,21 +216,13 @@ export default function AdminProducts() {
 
       if (res.ok && data.success) {
         setProductList(data.products || updated);
-        showToast(`Added ${newProd.name}! Products updated live on website.`, "success");
-        setIsDrafting(false);
-        setDraftProduct({
-          name: "",
-          category: "AI & Automation",
-          headlineLine1: "",
-          headlineLine2: "",
-          description: "",
-          url: "",
-          logo: "/brand/camvia-logo.svg",
-          stats1Label: "Operational Efficiency",
-          stats1Value: "+45%",
-          stats2Label: "AI Insights",
-          stats2Value: "Real-Time",
-        });
+        showToast(
+          editingId
+            ? `Updated ${prodPayload.name}! Changes saved live.`
+            : `Added ${prodPayload.name}! Products updated live on website.`,
+          "success"
+        );
+        setIsModalOpen(false);
       } else {
         showToast(data.error || "Failed to save product.", "error");
       }
@@ -288,7 +319,7 @@ export default function AdminProducts() {
           </button>
 
           <button
-            onClick={() => setIsDrafting(true)}
+            onClick={openAddModal}
             className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan via-blue to-violet px-4 text-xs font-bold text-white shadow-md transition hover:opacity-95"
           >
             <Plus size={16} />
@@ -305,7 +336,7 @@ export default function AdminProducts() {
             className="glass group relative flex flex-col justify-between overflow-hidden rounded-[26px] p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:bg-white/95"
           >
             <div>
-              {/* Top row with Logo and Live App link */}
+              {/* Top row with Logo and Actions */}
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3.5">
                   {/* Product Logo Container */}
@@ -332,6 +363,14 @@ export default function AdminProducts() {
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => openEditModal(prod)}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-blue/15 bg-white/80 text-blue hover:bg-blue hover:text-white transition-colors"
+                    title="Edit product"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+
                   <a
                     href={prod.href}
                     target="_blank"
@@ -342,7 +381,6 @@ export default function AdminProducts() {
                     <ArrowUpRight size={13} />
                   </a>
 
-                  {/* Delete button (protected for built-in or custom) */}
                   <button
                     onClick={() => handleDeleteProduct(prod.id, prod.name)}
                     className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
@@ -395,23 +433,27 @@ export default function AdminProducts() {
         ))}
       </div>
 
-      {/* Draft Product Modal */}
-      {isDrafting && (
+      {/* Add / Edit Product Modal */}
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-lg rounded-[28px] border border-white/80 bg-white p-6 shadow-2xl sm:p-8 max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => setIsDrafting(false)}
+              onClick={() => setIsModalOpen(false)}
               className="absolute right-5 top-5 rounded-full p-2 text-muted hover:bg-black/5"
             >
               <X size={18} />
             </button>
 
-            <h3 className="text-[18px] font-bold text-navy">Add New Product</h3>
+            <h3 className="text-[18px] font-bold text-navy">
+              {editingId ? `Edit ${draftProduct.name}` : "Add New Product"}
+            </h3>
             <p className="mt-1 text-[13px] text-muted">
-              Publish a new proprietary digital product to ELVAVEO. It will be immediately live across all public pages.
+              {editingId
+                ? "Update product details, logo, and metrics live on the website."
+                : "Publish a new proprietary digital product to ELVAVEO. It will be immediately live across all public pages."}
             </p>
 
-            <form onSubmit={handleAddDraft} className="mt-5 space-y-4">
+            <form onSubmit={handleSaveProduct} className="mt-5 space-y-4">
               <div>
                 <label className="text-xs font-bold text-navy">Product Name *</label>
                 <input
@@ -592,7 +634,7 @@ export default function AdminProducts() {
               <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setIsDrafting(false)}
+                  onClick={() => setIsModalOpen(false)}
                   className="rounded-xl px-4 py-2 text-xs font-bold text-muted hover:text-navy"
                 >
                   Cancel
@@ -602,7 +644,7 @@ export default function AdminProducts() {
                   disabled={isSaving || isUploading}
                   className="rounded-xl bg-gradient-to-r from-cyan via-blue to-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
                 >
-                  {isSaving ? "Saving Live..." : "Publish & Save Live"}
+                  {isSaving ? "Saving Live..." : editingId ? "Save Changes" : "Publish & Save Live"}
                 </button>
               </div>
             </form>
