@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     "cloud and devops",
     "digital consulting",
     "Finlo",
-    "FinloNexa CRM",
+    "FinloCRM",
   ],
   authors: [{ name: SITE_AUTHOR, url: SITE_URL }],
   creator: SITE_AUTHOR,

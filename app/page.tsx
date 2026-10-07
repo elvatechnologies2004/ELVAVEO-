@@ -12,7 +12,7 @@ export default function Home() {
   return (
     <>
       <Navbar />
-      <main id="main">
+      <main id="main" className="overflow-hidden bg-ice">
         <HeroSection />
         <div className="bg-[url('/images/background-02.png')] bg-cover bg-center bg-no-repeat">
           <FeatureStrip />

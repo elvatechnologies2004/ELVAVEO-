@@ -11,10 +11,10 @@ import Reveal from "./Reveal";
 export default function FeatureStrip() {
   return (
     <section id="services" className="scroll-mt-24 w-full pb-6 lg:pb-8">
-      <div className="w-full">
+      <div className="mx-auto w-full max-w-[1520px] px-5 sm:px-8 lg:px-12">
         <Reveal>
           <div className="shadow-card relative overflow-hidden rounded-[24px] bg-sky-100/40 ring-1 ring-white/70 backdrop-blur-2xl">
-            <div className="grid lg:grid-cols-[minmax(250px,0.28fr)_minmax(0,0.72fr)]">
+            <div className="grid lg:grid-cols-[minmax(240px,0.28fr)_minmax(0,0.72fr)]">
               {/* Left intro block */}
               <div className="border-b border-line p-5 sm:p-6 lg:border-b-0 lg:border-r lg:p-6">
                 <p className="eyebrow text-[10.5px]">What We Do</p>
@@ -28,7 +28,7 @@ export default function FeatureStrip() {
               </div>
 
               {/* Right — 4 equal rectangle service cards */}
-              <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3.5 p-3.5 sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-2 xl:grid-cols-4">
                 {services.map((service) => (
                   <div
                     key={service.title}
@@ -62,7 +62,7 @@ export default function FeatureStrip() {
             {/* View All Services — bottom-right footer row */}
             <div className="flex justify-end border-t border-line/60 px-5 py-3.5 sm:px-6">
               <Link
-                href="/"
+                href="/services"
                 className="inline-flex items-center gap-1.5 text-[13px] font-bold text-blue transition-colors hover:text-violet"
               >
                 View All Services

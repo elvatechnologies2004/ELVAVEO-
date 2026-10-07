@@ -13,9 +13,9 @@ interface TimelineItemProps {
  */
 export default function TimelineItem({ label, title, description }: TimelineItemProps) {
   return (
-    <article className="relative pl-8 lg:pl-0 lg:pt-9">
+    <article className="relative pl-8 xl:pl-0 xl:pt-9">
       <span
-        className="absolute left-[3px] top-[6px] z-10 h-[15px] w-[15px] rounded-full border-[3px] border-white bg-blue shadow-[0_0_0_4px_rgba(53,109,255,0.14),0_0_18px_rgba(53,109,255,0.6)] lg:left-5 lg:top-0"
+        className="absolute left-[3px] top-[6px] z-10 h-[15px] w-[15px] rounded-full border-[3px] border-white bg-blue shadow-[0_0_0_4px_rgba(53,109,255,0.14),0_0_18px_rgba(53,109,255,0.6)] xl:left-5 xl:top-0"
         aria-hidden="true"
       />
 

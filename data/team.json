@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Syed Hussain Ali",
+    "role": "Founder & CEO",
+    "initials": "SHA",
+    "description": "Building digital products and software solutions with a focus on practical innovation and long-term value.",
+    "linkedin": "https://www.linkedin.com/"
+  },
+  {
+    "name": "Abdullah Rashid",
+    "role": "Lead Full-Stack Engineer",
+    "initials": "AR",
+    "description": "Specializing in modern web technologies, performant architectures, and scalable cloud solutions.",
+    "linkedin": "https://www.linkedin.com/"
+  },
+  {
+    "name": "Khatiba ",
+    "role": "Graphic Designer",
+    "initials": "PD",
+    "description": "Designing clean, human-centered interfaces and intuitive design systems for web and mobile products.",
+    "linkedin": "https://www.linkedin.com/"
+  },
+  {
+    "name": "Izhar Ali Jafar",
+    "role": "Mobile App Developer",
+    "initials": "IAJ",
+    "description": "Crafting seamless cross-platform mobile experiences with smooth animations and high reliability.",
+    "linkedin": "https://www.linkedin.com/"
+  },
+  {
+    "name": "Mudassir Khan",
+    "role": "Social Media Marketing",
+    "initials": "MK",
+    "description": "Hi i am Mudassir Khan ",
+    "linkedin": "https://www.linkedin.com/in/mudassir-khan-paracha"
+  }
+]

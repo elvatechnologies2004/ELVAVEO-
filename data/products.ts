@@ -60,8 +60,8 @@ export const products: Product[] = [
   },
   {
     id: "finlonexa",
-    name: "FinloNexa CRM",
-    logo: "/brand/finlonexa-crm-logo.svg",
+    name: "FinloCRM",
+    logo: "/brand/finlocrm-logo.png",
     badge: "An ELVAVEO Product",
     category: "CRM & Business",
     headline: ["Stronger Relationships.", "Bigger Opportunities."],

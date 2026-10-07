@@ -5,7 +5,7 @@ The marketing site for **ELVAVEO** — a software studio that builds digital pro
 - **Live site:** [elvaveo.com](https://elvaveo.com)
 - **Products:**
   - **Finlo** — personal finance app · [finlo.elvaveo.com](https://finlo.elvaveo.com)
-  - **FinloNexa CRM** — CRM for leads, deals and sales · [crm.elvaveo.com](https://crm.elvaveo.com)
+  - **FinloCRM** — CRM for leads, deals and sales · [crm.elvaveo.com](https://crm.elvaveo.com)
 - **Contact:** hello@elvaveo.com
 
 ---
@@ -87,7 +87,7 @@ To go live:
 | `/` | Home |
 | `/about` | About |
 | `/services` | Services |
-| `/products` | Products (Finlo, FinloNexa CRM) |
+| `/products` | Products (Finlo, FinloCRM) |
 | `/projects` | Projects |
 | `/contact` | Contact |
 | `/api/contact` | `POST` only — sends email via Resend |

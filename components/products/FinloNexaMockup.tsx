@@ -2,7 +2,7 @@ import { LayoutGrid, Users, Target, DollarSign, Settings } from "lucide-react";
 import type { ProductStat } from "@/data/products";
 
 /**
- * FinloNexa CRM desktop-window mockup — demo dashboard.
+ * FinloCRM desktop-window mockup — demo dashboard.
  * All values are placeholder demo data from data/products.ts.
  */
 export default function FinloNexaMockup({ stats }: { stats: ProductStat[] }) {
@@ -21,7 +21,7 @@ export default function FinloNexaMockup({ stats }: { stats: ProductStat[] }) {
         <span className="h-2 w-2 rounded-full bg-[#fcd34d]" />
         <span className="h-2 w-2 rounded-full bg-[#86efac]" />
         <span className="ml-1.5 flex-1 truncate rounded-full bg-white px-3 py-0.5 text-center text-[9.5px] font-medium text-muted ring-1 ring-line">
-          app.finlonexa.com
+          crm.elvaveo.com
         </span>
       </div>
 

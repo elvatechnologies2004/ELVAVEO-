@@ -1,7 +1,7 @@
 import { Users, Building2, Sparkles } from "lucide-react";
 
 /**
- * FinloNexa CRM compact overview panel — mirrors the Finlo SaaS panel style.
+ * FinloCRM compact overview panel — mirrors the Finlo SaaS panel style.
  * Featured badge (top-right), summary stat cards, deals table and a donut
  * chart with legend. Fills available height (h-full) so the card's overall
  * size does not change. All values are placeholder demo data.

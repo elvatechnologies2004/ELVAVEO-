@@ -27,7 +27,7 @@ export interface ShowcaseProject {
 /**
  * Projects shown on /projects.
  *
- * Only real, live ELVAVEO products are listed. Finlo and FinloNexa CRM link to
+ * Only real, live ELVAVEO products are listed. Finlo and FinloCRM link to
  * their public sites (finlo.elvaveo.com, crm.elvaveo.com) — no placeholders, no
  * invented clients, no invented metrics.
  *
@@ -50,12 +50,12 @@ export const showcaseProjects: ShowcaseProject[] = [
   },
   {
     id: "finlonexa-crm",
-    title: "FinloNexa CRM",
+    title: "FinloCRM",
     category: "SaaS Platforms",
     categoryLabel: "SaaS / CRM",
     description:
       "A modern customer relationship management platform designed to manage leads, customers, sales workflows, and business growth.",
-    logo: "/brand/finlonexa-crm-logo.svg",
+    logo: "/brand/finlocrm-logo.png",
     href: "https://crm.elvaveo.com",
     cta: "View Project",
     icon: Layers,

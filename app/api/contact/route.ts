@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs/promises";
+import path from "path";
 import { CONTACT_SUBJECTS, type ContactApiResponse } from "@/types";
 import { CONTACT_EMAIL as DEFAULT_CONTACT_EMAIL } from "@/lib/constants";
 
@@ -90,6 +92,25 @@ export async function POST(request: Request) {
     return fail("Please choose one of the listed topics.", 400);
   }
 
+  // Store inquiry for the Admin Panel so submissions are never lost
+  try {
+    const inquiriesPath = path.join(process.cwd(), "data", "inquiries.json");
+    const raw = await fs.readFile(inquiriesPath, "utf-8").catch(() => "[]");
+    const currentList = JSON.parse(raw);
+    currentList.unshift({
+      id: `inq-${Date.now()}`,
+      name,
+      email,
+      subject,
+      message,
+      status: "new",
+      createdAt: new Date().toISOString(),
+    });
+    await fs.writeFile(inquiriesPath, JSON.stringify(currentList, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[contact] Failed to store inquiry in admin data:", err);
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
@@ -154,6 +175,44 @@ export async function POST(request: Request) {
       console.error(
         `[contact] Resend rejected the send (${resendResponse.status}): ${detail}`
       );
+
+      // In Resend onboarding/test mode without a verified domain, emails can only
+      // be sent to the registered account owner. If rejected for this reason,
+      // extract the authorized email and safely retry delivery.
+      if (
+        resendResponse.status === 403 &&
+        detail.includes("You can only send testing emails to your own email address")
+      ) {
+        const match = detail.match(/\(([^)]+@[^)]+)\)/);
+        if (match && match[1]) {
+          const fallbackEmail = match[1];
+          console.warn(
+            `[contact] Retrying delivery to authorized Resend account email: ${fallbackEmail}`
+          );
+          const retryResponse = await fetch(RESEND_ENDPOINT, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from,
+              to: [fallbackEmail],
+              reply_to: email,
+              subject: `[${subject}] ${name}`,
+              text,
+              html,
+            }),
+          });
+          if (retryResponse.ok) {
+            return json(
+              { success: true, message: "Message sent successfully." },
+              200
+            );
+          }
+        }
+      }
+
       return fail("Your message could not be sent. Please try again.", 502);
     }
   } catch (error) {

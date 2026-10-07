@@ -1,0 +1,26 @@
+[
+  {
+    "id": "finlo",
+    "title": "Finlo",
+    "category": "Fintech",
+    "categoryLabel": "Fintech",
+    "description": "A personal finance platform designed to help users understand, plan, and manage their finances with confidence.",
+    "logo": "/brand/finlo-logo.svg",
+    "href": "https://finlo.elvaveo.com",
+    "cta": "View Project",
+    "iconName": "Wallet",
+    "isProduct": true
+  },
+  {
+    "id": "finlonexa-crm",
+    "title": "FinloCRM",
+    "category": "SaaS Platforms",
+    "categoryLabel": "SaaS / CRM",
+    "description": "A modern customer relationship management platform designed to manage leads, customers, sales workflows, and business growth.",
+    "logo": "/brand/finlocrm-logo.png",
+    "href": "https://crm.elvaveo.com",
+    "cta": "View Project",
+    "iconName": "Layers",
+    "isProduct": true
+  }
+]

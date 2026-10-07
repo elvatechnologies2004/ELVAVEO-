@@ -11,7 +11,7 @@ interface ProductCardProps {
 
 /**
  * Product showcase card. Finlo renders a compact SaaS dashboard on the RIGHT
- * side (copy on the left); FinloNexa is copy-only. Card padding and outer
+ * side (copy on the left); FinloCRM is copy-only. Card padding and outer
  * dimensions stay unchanged.
  */
 export default function ProductCard({ product }: ProductCardProps) {
@@ -21,7 +21,7 @@ export default function ProductCard({ product }: ProductCardProps) {
     <article className="group flex h-full flex-col overflow-hidden rounded-[16px] border border-white/70 bg-gradient-to-b from-white/75 via-white/55 to-white/35 shadow-[0_10px_30px_-16px_rgba(42,83,150,0.3)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(42,83,150,0.45)]">
       <div
         className={cn(
-          "grid gap-[14px] p-[11px] sm:p-[14px] md:gap-[14px] lg:p-[14px]",
+          "grid gap-[14px] p-3.5 sm:p-5 md:gap-4 lg:p-6",
           isFinlo && "items-center xl:grid-cols-[0.5fr_0.5fr]"
         )}
       >
@@ -36,19 +36,21 @@ export default function ProductCard({ product }: ProductCardProps) {
               sizes="200px"
               className={cn(
                 "object-contain",
-                isFinlo ? "mt-[35.04px] h-[58.4px] w-auto" : "h-10 w-auto"
+                isFinlo
+                  ? "mt-0 h-10 w-auto sm:h-12 xl:mt-[30px] xl:h-[58px]"
+                  : "h-9 w-auto sm:h-10"
               )}
             />
           </div>
 
           <div className="flex flex-1 flex-col justify-center">
-            <p className="mt-3 max-w-[460px] text-[17px] leading-relaxed text-muted">
+            <p className="mt-3 max-w-[460px] text-[15px] leading-relaxed text-muted sm:text-[16px] xl:text-[17px]">
               {product.description}
             </p>
 
             <Link
               href={product.href}
-              className="group/link mt-[14px] inline-flex w-fit items-center gap-2 text-[15px] font-bold text-blue transition-colors hover:text-violet focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue"
+              className="group/link mt-[14px] inline-flex w-fit items-center gap-2 text-[14px] font-bold text-blue transition-colors hover:text-violet focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue sm:text-[15px]"
               aria-label={`${product.name} — ${product.cta}`}
             >
               {product.cta}

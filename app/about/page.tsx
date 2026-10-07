@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { createPageMetadata } from "@/lib/metadata";
 import Image from "next/image";
 import type { ReactNode } from "react";
@@ -25,6 +25,10 @@ import Reveal from "@/components/Reveal";
 import ValueCard from "@/components/about/ValueCard";
 import TimelineItem from "@/components/about/TimelineItem";
 import LeadershipCard from "@/components/about/LeadershipCard";
+import TeamSlider from "@/components/about/TeamSlider";
+import { getTeamMembers } from "@/lib/dataStore";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = createPageMetadata({
   title: "About",
@@ -139,7 +143,7 @@ const journey: { label: string; title: string; description: string }[] = [
   },
   {
     label: "Product Ecosystem",
-    title: "Finlo and FinloNexa CRM",
+    title: "Finlo and FinloCRM",
     description: "A growing family of products under one company.",
   },
   {
@@ -154,20 +158,7 @@ const journey: { label: string; title: string; description: string }[] = [
   },
 ];
 
-// 7 — Leadership
-const founder = {
-  name: "Syed Hussain Ali",
-  role: "Founder, ELVAVEO",
-  initials: "SHA",
-  description:
-    "Building digital products and software solutions with a focus on practical innovation and long-term value.",
-};
-
-const growingTeam = {
-  title: "Growing Team",
-  quote:
-    "We are building a multidisciplinary team around products, design, technology, and growth.",
-};
+// 7 — Team is loaded from "@/data/team"
 
 // 8 — Trust / capabilities
 const capabilities: { icon: LucideIcon; title: string; description: string }[] = [
@@ -198,7 +189,8 @@ const capabilities: { icon: LucideIcon; title: string; description: string }[] =
   },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const members = await getTeamMembers();
   return (
     <>
       <Navbar />
@@ -223,15 +215,15 @@ export default function AboutPage() {
           <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-[clamp(101px,18.24vh,181px)] pb-[clamp(73px,11.4vh,141px)] sm:px-8 lg:min-h-[101vh] lg:px-12">
             <Reveal>
               <div className="max-w-[640px]">
-                <p className="eyebrow text-[11px] sm:text-xs">
-                  People&nbsp;•&nbsp;Ideas&nbsp;•&nbsp;Technology&nbsp;•&nbsp;A Brighter Tomorrow
+                <p className="eyebrow text-[10.5px] sm:text-xs">
+                  People • Ideas • Technology • A Brighter Tomorrow
                 </p>
 
-                <h1 className="mt-[clamp(22px,4vh,30px)] text-balance text-[38px] font-extrabold leading-[1.04] text-navy sm:text-[56px] xl:text-[60px] 2xl:text-[68px]">
+                <h1 className="mt-[clamp(16px,3.5vh,30px)] text-balance text-[30px] min-[400px]:text-[34px] font-extrabold leading-[1.08] text-navy sm:text-[50px] sm:leading-[1.04] md:text-[56px] xl:text-[60px] 2xl:text-[68px]">
                   About <span className="text-gradient">ELVAVEO</span>
                 </h1>
 
-                <p className="mt-5 max-w-[600px] text-balance text-[19px] font-semibold leading-snug text-navy/90 sm:text-[23px]">
+                <p className="mt-4 max-w-[600px] text-balance text-[17px] font-semibold leading-snug text-navy/90 sm:mt-5 sm:text-[22px]">
                   We build digital products, software, and modern business
                   solutions that turn ideas into real impact.
                 </p>
@@ -427,8 +419,8 @@ export default function AboutPage() {
           >
             <SectionHeading eyebrow="Our Journey" title="A Story of Growth" />
 
-            {/* Horizontal track on desktop, vertical rail on mobile */}
-            <div className="relative mt-12 grid gap-5 before:absolute before:bottom-4 before:left-[10px] before:top-2 before:w-px before:bg-gradient-to-b before:from-cyan before:via-blue before:to-violet lg:grid-cols-6 lg:gap-3 lg:before:bottom-auto lg:before:left-0 lg:before:right-0 lg:before:top-[11px] lg:before:h-px lg:before:w-auto lg:before:bg-gradient-to-r">
+            {/* Horizontal track on desktop, vertical rail on mobile/tablet */}
+            <div className="relative mt-12 grid gap-5 before:absolute before:bottom-4 before:left-[10px] before:top-2 before:w-px before:bg-gradient-to-b before:from-cyan before:via-blue before:to-violet xl:grid-cols-6 xl:gap-3 xl:before:bottom-auto xl:before:left-0 xl:before:right-0 xl:before:top-[11px] xl:before:h-px xl:before:w-auto xl:before:bg-gradient-to-r">
               {journey.map((stage, index) => (
                 <Reveal key={stage.label} delay={index * 0.05}>
                   <TimelineItem {...stage} />
@@ -437,27 +429,21 @@ export default function AboutPage() {
             </div>
           </section>
 
-          {/* ============ 7 — LEADERSHIP ============ */}
+          {/* ============ 7 — TEAM ============ */}
           <section
-            id="leadership"
+            id="team"
             className="scroll-mt-24 border-y border-white/55 bg-white/25"
           >
             <div className="mx-auto w-full max-w-[1520px] px-5 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-24">
               <SectionHeading
-                eyebrow="Our Leadership"
-                title="Meet Our Leadership"
-                description="The people building ELVAVEO, and the team we are growing around them."
+                eyebrow="Our Team"
+                title="Meet Our Team"
+                description="The dedicated minds building ELVAVEO, driving innovation, and shaping modern digital solutions."
               />
 
-              <div className="mx-auto mt-10 grid max-w-[900px] gap-5 md:grid-cols-2">
+              <div className="mt-10">
                 <Reveal>
-                  {/* No verified portrait asset ships with the project, so the
-                      card falls back to a typographic monogram. Pass `image`
-                      to LeadershipCard once one is available. */}
-                  <LeadershipCard variant="person" {...founder} />
-                </Reveal>
-                <Reveal delay={0.08}>
-                  <LeadershipCard variant="team" {...growingTeam} />
+                  <TeamSlider members={members} />
                 </Reveal>
               </div>
             </div>
@@ -579,7 +565,7 @@ function StoryVisual() {
   ];
 
   return (
-    <div className="relative min-h-[356px] overflow-hidden rounded-[24px] border border-white/80 shadow-card-lg sm:min-h-[452px]">
+    <div className="relative min-h-[420px] overflow-hidden rounded-[24px] border border-white/80 shadow-card-lg sm:min-h-[460px]">
       <Image
         src="/images/hero-mountain-lake.jpg"
         alt="A calm mountain lake at sunrise"
@@ -591,7 +577,7 @@ function StoryVisual() {
       <div className="absolute inset-0 bg-gradient-to-t from-[#0b2a65]/55 via-transparent to-white/10" />
 
       {/* Software window mockup */}
-      <div className="absolute inset-x-5 top-6 sm:inset-x-10 sm:top-10">
+      <div className="absolute inset-x-4 top-5 sm:inset-x-10 sm:top-10">
         <div className="overflow-hidden rounded-[16px] border border-white/70 bg-white/35 shadow-[0_26px_60px_-28px_rgba(11,42,101,0.6)] backdrop-blur-2xl">
           {/* Window chrome */}
           <div className="flex items-center gap-1.5 border-b border-white/60 bg-white/40 px-3.5 py-2.5 backdrop-blur-xl">
@@ -634,9 +620,9 @@ function StoryVisual() {
       </div>
 
       {/* Overlay glass card */}
-      <div className="absolute inset-x-5 bottom-5 rounded-[18px] border border-white/55 bg-white/70 px-5 py-4 shadow-card backdrop-blur-xl sm:inset-x-8 sm:bottom-8 sm:px-6">
+      <div className="absolute inset-x-4 bottom-4 rounded-[18px] border border-white/55 bg-white/70 px-5 py-4 shadow-card backdrop-blur-xl sm:inset-x-8 sm:bottom-8 sm:px-6">
         <p className="eyebrow">Ideas With Purpose</p>
-        <p className="mt-2 text-balance text-[18px] font-bold leading-snug text-navy sm:text-[21px]">
+        <p className="mt-2 text-balance text-[17px] font-bold leading-snug text-navy sm:text-[21px]">
           Built for people. Designed for what&apos;s next.
         </p>
       </div>

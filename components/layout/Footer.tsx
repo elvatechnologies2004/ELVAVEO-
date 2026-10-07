@@ -1,4 +1,4 @@
-﻿import Image from "next/image";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowUp, ArrowUpRight } from "lucide-react";
 import { navItems, productLinks, siteUrl, socialLinks } from "@/data/navigation";
@@ -36,8 +36,8 @@ export default function Footer() {
     <footer className="w-full px-5 pb-5 pt-2 sm:px-8 lg:px-12 lg:pb-8">
       <div className="mx-auto w-full max-w-[1520px]">
         <div className="rounded-[24px] border border-white/80 bg-white/70 p-6 shadow-card backdrop-blur-2xl sm:p-8 lg:p-10">
-          <div className="grid gap-x-8 gap-y-9 sm:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr_0.9fr_1.2fr_0.9fr]">
-            <div>
+          <div className="grid gap-x-6 gap-y-8 sm:grid-cols-2 sm:gap-x-8 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-[1.2fr_0.8fr_0.9fr_1.2fr_0.9fr]">
+            <div className="sm:col-span-2 md:col-span-3 lg:col-span-1">
               <Link href="/" aria-label={`${SITE_NAME} home`} className="inline-flex">
                 <Image
                   src={BRAND_LOGO}
@@ -103,12 +103,21 @@ export default function Footer() {
           <p className="text-[12px] text-navy/70">
             &copy; {year} {SITE_NAME}. All rights reserved.
           </p>
-          <a
-            href="#main"
-            className="inline-flex items-center gap-1 text-[12px] text-navy/70 transition-colors hover:text-blue"
-          >
-            Back to top <ArrowUp size={13} aria-hidden="true" />
-          </a>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1 text-[12px] text-navy/70 transition-colors hover:text-blue"
+            >
+              Admin Portal
+            </Link>
+            <span className="text-muted/40">&bull;</span>
+            <a
+              href="#main"
+              className="inline-flex items-center gap-1 text-[12px] text-navy/70 transition-colors hover:text-blue"
+            >
+              Back to top <ArrowUp size={13} aria-hidden="true" />
+            </a>
+          </div>
         </div>
       </div>
     </footer>

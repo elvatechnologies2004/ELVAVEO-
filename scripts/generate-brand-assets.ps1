@@ -237,7 +237,7 @@ if (Test-Path $Wordmark) {
 
   $descFont = New-Object System.Drawing.Font -ArgumentList @("Segoe UI", 22, [System.Drawing.FontStyle]::Regular)
   $descBrush = New-Object System.Drawing.SolidBrush -ArgumentList @($muted)
-  $g.DrawString("We design, build and scale software that creates real impact - including Finlo and FinloNexa CRM.",
+  $g.DrawString("We design, build and scale software that creates real impact - including Finlo and FinloCRM.",
     $descFont, $descBrush,
     (New-Object System.Drawing.RectangleF -ArgumentList @([single]60, [single]($tagY + 54), [single]1080, [single]40)), $center)
 
@@ -251,7 +251,7 @@ if (Test-Path $Wordmark) {
     (New-Object System.Drawing.RectangleF -ArgumentList @($pillX, [single]($pillY + 12), [single]$pillW, [single]36)), $center)
 
   $pillFontSm = New-Object System.Drawing.Font -ArgumentList @("Segoe UI", 18, [System.Drawing.FontStyle]::Regular)
-  $g.DrawString("Finlo   /   FinloNexa CRM", $pillFontSm, $descBrush,
+  $g.DrawString("Finlo   /   FinloCRM", $pillFontSm, $descBrush,
     (New-Object System.Drawing.RectangleF -ArgumentList @($pillX, [single]($pillY + 48), [single]$pillW, [single]28)), $center)
 
   Fill-Ramp $g 0 ($h - 8) $w 8 $false

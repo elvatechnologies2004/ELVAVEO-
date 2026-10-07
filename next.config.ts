@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   images: {
-    // Self-hosted, trusted brand SVGs only (Finlo / FinloNexa placeholders).
+    // Self-hosted, trusted brand SVGs only (Finlo / FinloCRM placeholders).
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",

@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { createPageMetadata } from "@/lib/metadata";
 import Image from "next/image";
 import {
@@ -163,15 +163,15 @@ export default function ServicesPage() {
             <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/55 to-ice" />
           </div>
 
-          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-[clamp(101px,18.24vh,181px)] pb-[clamp(73px,11.4vh,141px)] sm:px-8 lg:min-h-[101vh] lg:px-12">
+          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-24 pb-12 sm:px-8 sm:pt-[clamp(101px,18.24vh,181px)] sm:pb-[clamp(73px,11.4vh,141px)] lg:min-h-[94vh] lg:px-12 xl:min-h-[100vh]">
             <Reveal>
               <div className="w-full xl:w-[70%]">
-                <p className="eyebrow text-[11px] sm:text-xs">Our Services</p>
-                <h1 className="mt-[clamp(22px,4vh,30px)] text-balance text-[38px] font-extrabold leading-[1.04] text-navy sm:text-[56px] xl:text-[60px] 2xl:text-[68px]">
+                <p className="eyebrow text-[10.5px] sm:text-xs">Our Services</p>
+                <h1 className="mt-[clamp(16px,3.5vh,30px)] text-balance text-[30px] min-[400px]:text-[34px] font-extrabold leading-[1.08] text-navy sm:text-[50px] sm:leading-[1.04] md:text-[56px] xl:text-[60px] 2xl:text-[68px]">
                   Services That Turn Ideas Into
                   <span className="block text-gradient">Scalable Digital Solutions</span>
                 </h1>
-                <p className="mt-5 max-w-[580px] text-[17px] leading-relaxed text-muted sm:text-lg">
+                <p className="mt-4 max-w-[580px] text-[15px] leading-relaxed text-muted sm:mt-5 sm:text-lg">
                   From strategy to execution, ELVAVEO helps businesses turn ideas into powerful digital products. We combine technology, design, and business insight to build solutions that create real impact.
                 </p>
                 <div className="mt-[clamp(24px,4.5vh,32px)] flex flex-col gap-3 sm:flex-row sm:gap-4">

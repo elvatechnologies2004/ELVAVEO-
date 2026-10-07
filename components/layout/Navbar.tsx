@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
@@ -60,7 +60,7 @@ export default function Navbar() {
           : "border-b border-transparent bg-transparent"
       )}
     >
-      <div className="mx-auto grid h-[64px] w-full max-w-[1520px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 sm:gap-6 sm:px-8 lg:px-12">
+      <div className="mx-auto flex h-[64px] w-full max-w-[1520px] items-center justify-between px-5 sm:px-8 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:gap-6 lg:px-12">
         {/* Logo */}
         <Link
           href="/"
@@ -74,7 +74,7 @@ export default function Navbar() {
             height={52}
             priority
             sizes="142px"
-            className="h-[52px] w-auto object-contain"
+            className="h-[44px] w-auto object-contain sm:h-[52px]"
           />
         </Link>
 
@@ -141,13 +141,14 @@ export default function Navbar() {
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="overflow-hidden border-b border-line bg-white/95 backdrop-blur-xl lg:hidden"
           >
-            <div className="space-y-1 px-5 py-5 sm:px-8">
+            <div className="max-h-[calc(100dvh-64px)] space-y-1 overflow-y-auto px-5 py-5 sm:px-8">
               {navItems.map((item) => {
                 const active = isActive(item.href);
                 return (
                   <Link
                     key={item.label}
                     href={item.href}
+                    onClick={() => setOpen(false)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "block rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
@@ -161,7 +162,11 @@ export default function Navbar() {
                 );
               })}
               <div className="flex items-center gap-3 pt-3">
-                <GradientButton href={contactHref} className="flex-1">
+                <GradientButton
+                  href={contactHref}
+                  onClick={() => setOpen(false)}
+                  className="flex-1"
+                >
                   Get Started
                 </GradientButton>
               </div>

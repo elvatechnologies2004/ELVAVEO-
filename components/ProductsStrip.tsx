@@ -17,7 +17,7 @@ const brands = [
     href: "https://finlo.elvaveo.com",
   },
   {
-    title: "FinloNexa CRM",
+    title: "FinloCRM",
     description:
       "A modern CRM to manage leads, customers, deals, and sales workflows — built for growing businesses.",
     chip: "SaaS / CRM",
@@ -37,12 +37,12 @@ const brands = [
 export default function ProductsStrip() {
   return (
     <section id="products-strip" className="scroll-mt-24 w-full pb-6 lg:pb-8">
-      <div className="w-full">
+      <div className="mx-auto w-full max-w-[1520px] px-5 sm:px-8 lg:px-12">
         <Reveal>
           <div className="shadow-card relative overflow-hidden rounded-[24px] ring-1 ring-white/70 backdrop-blur-2xl lg:min-h-[240px]">
-            <div className="grid lg:grid-cols-[minmax(250px,0.3fr)_minmax(0,0.7fr)]">
+            <div className="grid lg:grid-cols-[minmax(240px,0.28fr)_minmax(0,0.72fr)]">
               {/* intro block */}
-              <div className="flex min-h-[258.3px] flex-col justify-center border-b border-line p-6 sm:p-7 lg:border-b-0 lg:border-r">
+              <div className="flex min-h-[200px] flex-col justify-center border-b border-line p-5 sm:p-7 lg:min-h-[258.3px] lg:border-b-0 lg:border-r">
                 <p className="eyebrow text-[10.5px]">Our Products</p>
                 <h2 className="mt-2 text-xl font-bold leading-tight text-navy sm:text-[22px]">
                   Software Products for a Smarter Tomorrow
@@ -54,20 +54,20 @@ export default function ProductsStrip() {
               </div>
 
               {/* 3 brand cards */}
-              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 p-3.5 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
                 {brands.map((b) => (
                   <div
                     key={b.title}
-                    className="flex min-h-[258.3px] flex-col items-start justify-between rounded-[16px] border border-white/70 bg-gradient-to-b from-white/75 via-white/55 to-white/35 p-6 shadow-[0_10px_30px_-16px_rgba(42,83,150,0.3)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(42,83,150,0.45)]"
+                    className="flex min-h-[220px] flex-col items-start justify-between rounded-[16px] border border-white/70 bg-gradient-to-b from-white/75 via-white/55 to-white/35 p-4 shadow-[0_10px_30px_-16px_rgba(42,83,150,0.3)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(42,83,150,0.45)] sm:min-h-[258px] sm:p-5"
                   >
                     <div>
                       <span className="w-fit rounded-full bg-gradient-main px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
                         {b.chip}
                       </span>
-                      <h3 className="mt-4 text-[18.7px] font-extrabold text-navy">
+                      <h3 className="mt-3.5 text-[17px] font-extrabold text-navy sm:text-[18.5px]">
                         {b.title}
                       </h3>
-                      <p className="mt-2 text-[17px] leading-snug text-muted">
+                      <p className="mt-2 text-[13.5px] leading-relaxed text-muted sm:text-[14px]">
                         {b.description}
                       </p>
                     </div>

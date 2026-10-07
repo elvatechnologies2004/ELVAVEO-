@@ -1,10 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" role="img" aria-label="FinloNexa CRM">
-  <!--
-    PLACEHOLDER LOGO (generated for the build).
-    Replace with the official FinloNexa CRM logo asset (PNG/SVG) at
-    /public/brand/finlonexa-logo.* once supplied. Update the filename
-    reference in data/products.ts to match.
-  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" role="img" aria-label="FinloCRM">
   <defs>
     <linearGradient id="nexaG" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#2563ff"/>
@@ -16,6 +10,5 @@
   <rect x="15" y="17" width="50" height="50" rx="14" fill="url(#nexaG)"/>
   <circle cx="38" cy="45" r="10" fill="#ffffff" opacity="0.92"/>
 
-  <text x="82" y="49" font-family="Inter, Arial, sans-serif" font-size="33" font-weight="800" fill="#081b3d" letter-spacing="-0.5">FinloNexa</text>
-  <text x="252" y="49" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="url(#nexaG)" letter-spacing="1">CRM</text>
+  <text x="82" y="50" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" fill="#081b3d" letter-spacing="-0.5">Finlo<tspan fill="url(#nexaG)">CRM</tspan></text>
 </svg>

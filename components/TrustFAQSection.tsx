@@ -1,5 +1,6 @@
 import { Plus, Quote } from "lucide-react";
 import Reveal from "./Reveal";
+import { cn } from "@/lib/cn";
 
 const testimonials = [
   {
@@ -67,14 +68,17 @@ export default function TrustFAQSection() {
               </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              {testimonials.map((testimonial) => (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {testimonials.map((testimonial, idx) => (
                 <article
                   key={testimonial.name}
-                  className="flex min-h-[220px] flex-col rounded-[18px] border border-white/80 bg-white/65 p-5 shadow-[0_14px_34px_-22px_rgba(42,83,150,0.35)] backdrop-blur-xl sm:p-6"
+                  className={cn(
+                    "flex min-h-[200px] flex-col rounded-[18px] border border-white/80 bg-white/65 p-4 shadow-[0_14px_34px_-22px_rgba(42,83,150,0.35)] backdrop-blur-xl sm:p-6",
+                    idx === 2 && "sm:col-span-2 lg:col-span-1"
+                  )}
                 >
                   <Quote size={20} className="text-blue/70" aria-hidden="true" />
-                  <p className="mt-4 flex-1 text-[15px] font-medium leading-relaxed text-navy">
+                  <p className="mt-4 flex-1 text-[14px] font-medium leading-relaxed text-navy sm:text-[15px]">
                     “{testimonial.quote}”
                   </p>
                   <div className="mt-5 flex items-center gap-3 border-t border-line/70 pt-4">
@@ -100,7 +104,7 @@ export default function TrustFAQSection() {
           <div>
             <div className="mb-6">
               <p className="eyebrow text-[10.5px]">FAQ</p>
-              <h2 className="mt-2 text-[25px] font-extrabold leading-tight text-navy sm:text-[30px]">
+              <h2 className="mt-2 text-[23px] font-extrabold leading-tight text-navy sm:text-[30px]">
                 A few things you may be wondering
               </h2>
             </div>
@@ -109,7 +113,7 @@ export default function TrustFAQSection() {
               {faqs.map((faq) => (
                 <details
                   key={faq.question}
-                  className="group rounded-[16px] border border-white/80 bg-white/60 p-5 shadow-[0_10px_28px_-22px_rgba(42,83,150,0.4)] backdrop-blur-xl open:bg-white/75 sm:p-5"
+                  className="group rounded-[16px] border border-white/80 bg-white/60 p-4 shadow-[0_10px_28px_-22px_rgba(42,83,150,0.4)] backdrop-blur-xl open:bg-white/75 sm:p-5"
                 >
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-[14px] font-bold text-navy marker:content-none [&::-webkit-details-marker]:hidden">
                     {faq.question}

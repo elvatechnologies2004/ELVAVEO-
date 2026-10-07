@@ -47,6 +47,8 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    overflow-x: clip;
+    max-width: 100%;
   }
 
   body {
@@ -54,6 +56,8 @@
     color: var(--navy);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    overflow-x: clip;
+    max-width: 100%;
   }
 
   ::selection {
@@ -100,21 +104,36 @@
   .eyebrow {
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
+    max-width: 100%;
     gap: 0.6rem;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--blue);
+  }
+
+  @media (min-width: 640px) {
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.22em;
+    }
   }
 
   .eyebrow::before {
     content: "";
     height: 2px;
-    width: 28px;
+    width: 24px;
     border-radius: 9999px;
     background-image: var(--gradient-main);
     flex-shrink: 0;
+  }
+
+  @media (min-width: 640px) {
+    .eyebrow::before {
+      width: 28px;
+    }
   }
 
   .eyebrow-light {

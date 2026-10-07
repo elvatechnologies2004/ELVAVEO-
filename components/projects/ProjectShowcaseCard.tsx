@@ -21,8 +21,9 @@ export default function ProjectShowcaseCard({ project }: ProjectShowcaseCardProp
   return (
     <article className="glass group flex h-full flex-col overflow-hidden rounded-[22px] shadow-card transition duration-300 hover:-translate-y-1 hover:shadow-card-lg">
       {/* Visual preview */}
-      <div className="relative h-[224px] shrink-0 overflow-hidden border-b border-line bg-gradient-to-br from-[#e9f2ff] via-[#f3f1ff] to-[#e4faff] p-4">
+      <div className="relative h-[240px] shrink-0 overflow-hidden border-b border-line bg-gradient-to-br from-[#e9f2ff] via-[#f3f1ff] to-[#e4faff] p-3 sm:h-[270px] sm:p-4">
         <ProjectPreview project={project} />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#e9f2ff] to-transparent" aria-hidden="true" />
       </div>
 
       {/* Body */}

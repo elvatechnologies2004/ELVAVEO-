@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { createPageMetadata } from "@/lib/metadata";
 import Image from "next/image";
 import { ArrowDown } from "lucide-react";
@@ -12,18 +12,26 @@ import {
   caseStudyMetrics,
   projectBenefits,
   projectCapabilities,
-  showcaseProjects,
 } from "@/data/projectShowcase";
+import { getProjects } from "@/lib/dataStore";
+import { Wallet, Layers } from "lucide-react";
 import { CONTACT_EMAIL } from "@/lib/constants";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Projects",
   description:
-    "Explore the products ELVAVEO has built — Finlo personal finance and FinloNexa CRM, both live and open to use.",
+    "Explore the products ELVAVEO has built — Finlo personal finance and FinloCRM, both live and open to use.",
   path: "/projects",
 });
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const storedProjects = await getProjects();
+  const projects = storedProjects.map((p) => ({
+    ...p,
+    icon: p.id === "finlo" ? Wallet : Layers,
+  }));
   return (
     <>
       <Navbar />
@@ -45,19 +53,19 @@ export default function ProjectsPage() {
             <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/55 to-ice" />
           </div>
 
-          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-[clamp(101px,18.24vh,181px)] pb-[clamp(73px,11.4vh,141px)] sm:px-8 lg:min-h-[101vh] lg:px-12">
+          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-24 pb-12 sm:px-8 sm:pt-[clamp(101px,18.24vh,181px)] sm:pb-[clamp(73px,11.4vh,141px)] lg:min-h-[94vh] lg:px-12 xl:min-h-[100vh]">
             <Reveal>
               <div className="w-full xl:w-[70%]">
-                <p className="eyebrow text-[11px] sm:text-xs">
-                  Real Businesses. Real Solutions. Real Impact.
+                <p className="eyebrow text-[10.5px] sm:text-xs">
+                  Real Businesses • Real Solutions • Real Impact
                 </p>
 
-                <h1 className="mt-[clamp(22px,4vh,30px)] text-balance text-[38px] font-extrabold leading-[1.04] text-navy sm:text-[56px] xl:text-[60px] 2xl:text-[68px]">
+                <h1 className="mt-[clamp(16px,3.5vh,30px)] text-balance text-[30px] min-[400px]:text-[34px] font-extrabold leading-[1.08] text-navy sm:text-[50px] sm:leading-[1.04] md:text-[56px] xl:text-[60px] 2xl:text-[68px]">
                   Projects That Turn Ideas
                   <span className="block text-gradient">Into Real Impact</span>
                 </h1>
 
-                <p className="mt-5 max-w-[580px] text-[17px] leading-relaxed text-muted sm:text-lg">
+                <p className="mt-4 max-w-[580px] text-[15px] leading-relaxed text-muted sm:mt-5 sm:text-lg">
                   Explore how ELVAVEO transforms ideas into digital products and
                   software solutions designed to solve real problems and create
                   measurable value.
@@ -117,7 +125,7 @@ export default function ProjectsPage() {
             </Reveal>
 
             <div className="mt-8 grid gap-5 sm:grid-cols-2">
-              {showcaseProjects.map((project, index) => (
+              {projects.map((project, index) => (
                 <Reveal key={project.id} delay={index * 0.08} className="h-full">
                   <ProjectShowcaseCard project={project} />
                 </Reveal>

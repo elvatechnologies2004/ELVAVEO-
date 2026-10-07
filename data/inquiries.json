@@ -1,0 +1,47 @@
+[
+  {
+    "id": "inq-1791364895458",
+    "name": "Syed Hussain Ali",
+    "email": "hussain.ali.power2go@gmail.com",
+    "subject": "New Project",
+    "message": "dddd",
+    "status": "new",
+    "createdAt": "2026-10-07T09:21:35.458Z"
+  },
+  {
+    "id": "inq-101",
+    "name": "Zaid Malik",
+    "email": "zaid.malik@nexustech.io",
+    "subject": "Software Development",
+    "message": "Hi ELVAVEO team, we are looking to develop an enterprise SaaS portal for logistics automation. We loved your clean design and modern tech stack. Could we schedule an introductory call this week?",
+    "status": "new",
+    "createdAt": "2026-10-06T18:42:00.000Z"
+  },
+  {
+    "id": "inq-102",
+    "name": "Sarah Jenkins",
+    "email": "sarah.j@apexventures.com",
+    "subject": "SaaS Products",
+    "message": "Hello Syed, we came across FinloCRM and were impressed by the UX simplicity. Are you open to enterprise white-labeling or partnership opportunities?",
+    "status": "replied",
+    "createdAt": "2026-10-05T14:15:00.000Z"
+  },
+  {
+    "id": "inq-103",
+    "name": "Ahmed Raza",
+    "email": "ahmed.raza@fintechpk.com",
+    "subject": "Consultation",
+    "message": "We need architectural review and frontend performance optimization for our Next.js application. Please let us know your consultation availability and rates.",
+    "status": "new",
+    "createdAt": "2026-10-04T09:30:00.000Z"
+  },
+  {
+    "id": "inq-104",
+    "name": "David Miller",
+    "email": "d.miller@cloudwave.co",
+    "subject": "Partnership",
+    "message": "Interested in exploring a tech partnership with ELVAVEO for our cloud infrastructure clients. Let's connect soon.",
+    "status": "archived",
+    "createdAt": "2026-10-02T11:20:00.000Z"
+  }
+]

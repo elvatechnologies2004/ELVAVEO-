@@ -11,7 +11,7 @@ export const SITE_URL = "https://elvaveo.com";
 export const SITE_NAME = "ELVAVEO";
 
 export const SITE_DESCRIPTION =
-  "ELVAVEO builds modern software, SaaS products, web experiences and digital solutions, including Finlo and FinloNexa CRM.";
+  "ELVAVEO builds modern software, SaaS products, web experiences and digital solutions, including Finlo and FinloCRM.";
 
 export const SITE_AUTHOR = "ELVAVEO";
 
@@ -71,7 +71,7 @@ export const PRODUCT_LINKS: readonly ProductLink[] = [
   { id: "finlo", name: "Finlo", href: "https://finlo.elvaveo.com" },
   {
     id: "finlonexa",
-    name: "FinloNexa CRM",
+    name: "FinloCRM",
     href: "https://crm.elvaveo.com",
   },
 ] as const;

@@ -1,7 +1,7 @@
 {
   "name": "ELVAVEO",
   "short_name": "ELVAVEO",
-  "description": "ELVAVEO builds modern software, SaaS products, web experiences and digital solutions, including Finlo and FinloNexa CRM.",
+  "description": "ELVAVEO builds modern software, SaaS products, web experiences and digital solutions, including Finlo and FinloCRM.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

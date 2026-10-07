@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { createPageMetadata } from "@/lib/metadata";
 import Image from "next/image";
 import { ExternalLink } from "lucide-react";
@@ -9,19 +9,22 @@ import Reveal from "@/components/Reveal";
 import FinloPhoneMockup from "@/components/products/FinloPhoneMockup";
 import FinloNexaMockup from "@/components/products/FinloNexaMockup";
 import FinloNexaOverview from "@/components/products/FinloNexaOverview";
-import { products } from "@/data/products";
+import { getProducts } from "@/lib/dataStore";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/constants";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Products",
   description:
-    "Explore the ELVAVEO product lineup — Finlo for personal finance and FinloNexa CRM for managing leads, customers, and sales workflows.",
+    "Explore the ELVAVEO product lineup — Finlo for personal finance and FinloCRM for managing leads, customers, and sales workflows.",
   path: "/products",
 });
 
-const [finlo, finlonexa] = products;
-
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  const currentProducts = await getProducts();
+  const finlo = currentProducts.find((p) => p.id === "finlo") || currentProducts[0];
+  const finlonexa = currentProducts.find((p) => p.id === "finlonexa") || currentProducts[1];
   return (
     <>
       <Navbar />
@@ -41,15 +44,15 @@ export default function ProductsPage() {
             <div className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/55 to-ice" />
           </div>
 
-          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-[clamp(101px,18.24vh,181px)] pb-[clamp(73px,11.4vh,141px)] sm:px-8 lg:min-h-[101vh] lg:px-12">
+          <div className="mx-auto flex w-full max-w-[1520px] flex-col justify-center px-5 pt-24 pb-12 sm:px-8 sm:pt-[clamp(101px,18.24vh,181px)] sm:pb-[clamp(73px,11.4vh,141px)] lg:min-h-[94vh] lg:px-12 xl:min-h-[100vh]">
             <Reveal>
               <div className="w-full xl:w-[70%]">
-                <p className="eyebrow text-[11px] sm:text-xs">Our Products</p>
-                <h1 className="mt-[clamp(22px,4vh,30px)] text-balance text-[38px] font-extrabold leading-[1.04] text-navy sm:text-[56px] xl:text-[60px] 2xl:text-[68px]">
+                <p className="eyebrow text-[10.5px] sm:text-xs">Our Products</p>
+                <h1 className="mt-[clamp(16px,3.5vh,30px)] text-balance text-[30px] min-[400px]:text-[34px] font-extrabold leading-[1.08] text-navy sm:text-[50px] sm:leading-[1.04] md:text-[56px] xl:text-[60px] 2xl:text-[68px]">
                   Software We Build
                   <span className="block text-gradient">and Run Ourselves</span>
                 </h1>
-                <p className="mt-5 max-w-[580px] text-[17px] leading-relaxed text-muted sm:text-lg">
+                <p className="mt-4 max-w-[580px] text-[15px] leading-relaxed text-muted sm:mt-5 sm:text-lg">
                   {SITE_DESCRIPTION} Every product is designed, engineered, and
                   improved in-house.
                 </p>
@@ -72,7 +75,7 @@ export default function ProductsPage() {
                     size="lg"
                     className="w-full sm:w-auto"
                   >
-                    Open FinloNexa CRM
+                    Open FinloCRM
                   </GradientButton>
                 </div>
               </div>
@@ -124,7 +127,7 @@ export default function ProductsPage() {
             </div>
           </section>
 
-          {/* FinloNexa CRM */}
+          {/* FinloCRM */}
           <section
             id="finlonexa"
             className="scroll-mt-24 mx-auto w-full max-w-[1520px] px-5 pb-12 sm:px-8 sm:pb-16 lg:px-12 lg:pb-20"
@@ -135,7 +138,7 @@ export default function ProductsPage() {
                   <p className="eyebrow">{finlonexa.badge}</p>
                   <Image
                     src={finlonexa.logo}
-                    alt="FinloNexa CRM logo"
+                    alt="FinloCRM logo"
                     width={286}
                     height={114}
                     sizes="200px"
@@ -169,13 +172,13 @@ export default function ProductsPage() {
             </div>
           </section>
 
-          {/* FinloNexa overview strip */}
+          {/* FinloCRM overview strip */}
           <section className="mx-auto w-full max-w-[1520px] px-5 pb-12 sm:px-8 sm:pb-16 lg:px-12 lg:pb-20">
             <Reveal>
               <div className="glass-strong rounded-[24px] p-5 shadow-card-lg sm:rounded-[26px] sm:p-7 lg:p-9">
                 <div className="grid items-center gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] xl:gap-10">
                   <div className="max-w-[420px]">
-                    <span className="eyebrow">Inside FinloNexa</span>
+                    <span className="eyebrow">Inside FinloCRM</span>
                     <h2 className="mt-4 text-balance text-[30px] font-extrabold leading-tight text-navy sm:text-[36px]">
                       Every deal, pipeline, and customer in one place
                     </h2>
