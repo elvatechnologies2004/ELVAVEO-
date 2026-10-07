@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import {
   Layers,
   ExternalLink,
@@ -13,6 +14,8 @@ import {
   Globe,
   Tag,
   RefreshCw,
+  Upload,
+  Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { products as initialProducts, type Product } from "@/data/products";
@@ -21,6 +24,7 @@ export default function AdminProducts() {
   const [productList, setProductList] = useState<Product[]>(initialProducts);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [isDrafting, setIsDrafting] = useState(false);
@@ -29,6 +33,7 @@ export default function AdminProducts() {
     category: "AI & Automation",
     description: "",
     url: "",
+    logo: "/brand/elvaveo-logo.3d7b3289.png",
   });
 
   const showToast = (msg: string) => {
@@ -57,6 +62,56 @@ export default function AdminProducts() {
     fetchProducts();
   }, []);
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          setDraftProduct((prev) => ({ ...prev, logo: data.url }));
+          showToast("Logo uploaded successfully!");
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (uploadEvent) => {
+          if (uploadEvent.target?.result) {
+            setDraftProduct((prev) => ({
+              ...prev,
+              logo: String(uploadEvent.target?.result),
+            }));
+            showToast("Logo preview loaded!");
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        if (uploadEvent.target?.result) {
+          setDraftProduct((prev) => ({
+            ...prev,
+            logo: String(uploadEvent.target?.result),
+          }));
+          showToast("Logo preview loaded!");
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleAddDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!draftProduct.name || !draftProduct.description) return;
@@ -64,7 +119,7 @@ export default function AdminProducts() {
     const newProd: Product = {
       id: `custom-${Date.now()}` as any,
       name: draftProduct.name,
-      logo: "/brand/elvaveo-logo.png",
+      logo: draftProduct.logo || "/brand/elvaveo-logo.3d7b3289.png",
       badge: "An ELVAVEO Product",
       category: draftProduct.category,
       headline: [draftProduct.name, "Next Generation Platform"],
@@ -92,7 +147,13 @@ export default function AdminProducts() {
         setProductList(updated);
         showToast(`Added ${newProd.name}! Products updated live on website.`);
         setIsDrafting(false);
-        setDraftProduct({ name: "", category: "AI & Automation", description: "", url: "" });
+        setDraftProduct({
+          name: "",
+          category: "AI & Automation",
+          description: "",
+          url: "",
+          logo: "/brand/elvaveo-logo.3d7b3289.png",
+        });
       } else {
         showToast("Failed to save product.");
       }
@@ -166,15 +227,31 @@ export default function AdminProducts() {
             key={prod.id}
             className="glass group relative overflow-hidden rounded-[26px] p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:bg-white/95"
           >
-            {/* Top row */}
+            {/* Top row with Logo and Live App link */}
             <div className="flex items-start justify-between">
-              <div>
-                <span className="rounded-full bg-blue/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue">
-                  {prod.category}
-                </span>
-                <h3 className="mt-2 text-[22px] font-extrabold text-navy">
-                  {prod.name}
-                </h3>
+              <div className="flex items-center gap-3.5">
+                {/* Product Logo / Icon Container */}
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/90 bg-white/80 p-2 shadow-xs">
+                  {prod.logo ? (
+                    // Using img for absolute/relative compatibility with uploads & svgs
+                    <img
+                      src={prod.logo}
+                      alt={prod.name}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <Layers size={24} className="text-blue" />
+                  )}
+                </div>
+
+                <div>
+                  <span className="rounded-full bg-blue/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue">
+                    {prod.category}
+                  </span>
+                  <h3 className="mt-1 text-[20px] font-extrabold text-navy">
+                    {prod.name}
+                  </h3>
+                </div>
               </div>
 
               <a
@@ -226,7 +303,9 @@ export default function AdminProducts() {
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 Active Production
               </span>
-              <span className="font-mono text-[11px] text-blue">{prod.href}</span>
+              <span className="font-mono text-[11px] text-blue truncate max-w-[200px]">
+                {prod.href}
+              </span>
             </div>
           </article>
         ))}
@@ -235,7 +314,7 @@ export default function AdminProducts() {
       {/* Draft Product Modal */}
       {isDrafting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-[28px] border border-white/80 bg-white p-6 shadow-2xl sm:p-8">
+          <div className="relative w-full max-w-lg rounded-[28px] border border-white/80 bg-white p-6 shadow-2xl sm:p-8 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsDrafting(false)}
               className="absolute right-5 top-5 rounded-full p-2 text-muted hover:bg-black/5"
@@ -245,7 +324,7 @@ export default function AdminProducts() {
 
             <h3 className="text-[18px] font-bold text-navy">Draft New Product</h3>
             <p className="mt-1 text-[13px] text-muted">
-              Propose or add a new digital product to ELVAVEO. It will be saved live into database.
+              Propose or add a new digital product to ELVAVEO with custom logo and details.
             </p>
 
             <form onSubmit={handleAddDraft} className="mt-5 space-y-4">
@@ -261,6 +340,82 @@ export default function AdminProducts() {
                   }
                   className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
                 />
+              </div>
+
+              {/* Logo Upload & Selection Section */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-navy">Product Logo</label>
+                  {isUploading && (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-blue">
+                      <RefreshCw size={12} className="animate-spin" /> Uploading...
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex flex-col sm:flex-row items-center gap-3.5 rounded-2xl border border-blue/20 bg-ice p-3.5">
+                  {/* Live Logo Preview Box */}
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/90 bg-white p-2 shadow-xs">
+                    {draftProduct.logo ? (
+                      <img
+                        src={draftProduct.logo}
+                        alt="Logo preview"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={24} className="text-muted" />
+                    )}
+                  </div>
+
+                  {/* Upload button & Custom URL */}
+                  <div className="flex-1 w-full space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue/20 bg-white px-3 py-1.5 text-xs font-bold text-blue hover:bg-blue/5 transition-colors shadow-xs">
+                        <Upload size={13} />
+                        <span>Upload Logo (PNG, SVG, JPG)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="e.g. /brand/finlo-logo.svg or https://..."
+                      value={draftProduct.logo}
+                      onChange={(e) =>
+                        setDraftProduct({ ...draftProduct, logo: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-blue/15 bg-white px-3 py-1.5 text-xs font-mono text-navy focus:border-blue focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Preset Brand Logos Quick Selection */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10.5px] font-semibold text-muted">Presets:</span>
+                  {[
+                    { label: "Finlo Logo", path: "/brand/finlo-logo.svg" },
+                    { label: "FinloCRM Logo", path: "/brand/finlocrm-logo.png" },
+                    { label: "ELVAVEO Brand", path: "/brand/elvaveo-logo.3d7b3289.png" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.path}
+                      type="button"
+                      onClick={() => setDraftProduct({ ...draftProduct, logo: preset.path })}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                        draftProduct.logo === preset.path
+                          ? "bg-blue text-white shadow-xs"
+                          : "bg-white/80 border border-blue/15 text-navy/80 hover:bg-white hover:text-blue"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -314,7 +469,7 @@ export default function AdminProducts() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || isUploading}
                   className="rounded-xl bg-gradient-to-r from-cyan via-blue to-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
                 >
                   {isSaving ? "Saving Live..." : "Add & Save Live"}
