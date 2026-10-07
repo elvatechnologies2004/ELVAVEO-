@@ -1,4 +1,12 @@
-import { Bot, HeartPulse, Layers, LayoutGrid, Wallet, type LucideIcon } from "lucide-react";
+import {
+  Bot,
+  HeartPulse,
+  Layers,
+  LayoutGrid,
+  Wallet,
+  GraduationCap,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface ShowcaseProject {
   id: string;
@@ -27,13 +35,8 @@ export interface ShowcaseProject {
 /**
  * Projects shown on /projects.
  *
- * Only real, live ELVAVEO products are listed. Finlo and FinloCRM link to
- * their public sites (finlo.elvaveo.com, crm.elvaveo.com) — no placeholders, no
- * invented clients, no invented metrics.
- *
- * The earlier concept entries (RetailPlus, HealthHub, EduNext, InsightAI) were
- * removed on request. Reintroduce them with `isProduct: false` and an explicit
- * "Concept" status badge if they are ever built out for real.
+ * Only real, live ELVAVEO products are listed. Finlo, FinloCRM and CAMVIA link to
+ * their public sites (finlo.elvaveo.com, crm.elvaveo.com, camvia.elvaveo.com).
  */
 export const showcaseProjects: ShowcaseProject[] = [
   {
@@ -59,6 +62,19 @@ export const showcaseProjects: ShowcaseProject[] = [
     href: "https://crm.elvaveo.com",
     cta: "View Project",
     icon: Layers,
+    isProduct: true,
+  },
+  {
+    id: "camvia",
+    title: "CAMVIA",
+    category: "EdTech & AI",
+    categoryLabel: "EdTech & AI",
+    description:
+      "CAMVIA brings intelligence to school management with AI-powered insights, helping schools operate smarter and create brighter futures for every learner.",
+    logo: "/brand/camvia-logo.svg",
+    href: "https://camvia.elvaveo.com",
+    cta: "Explore Product",
+    icon: GraduationCap,
     isProduct: true,
   },
 ];

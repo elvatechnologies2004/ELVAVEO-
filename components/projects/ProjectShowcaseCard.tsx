@@ -1,8 +1,9 @@
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Layers, Sparkles } from "lucide-react";
 import type { ShowcaseProject } from "@/data/projectShowcase";
 import FinloDashboardScreenshot from "@/components/products/FinloDashboardScreenshot";
 import FinloNexaOverview from "@/components/products/FinloNexaOverview";
+import CamviaDashboardScreenshot from "@/components/products/CamviaDashboardScreenshot";
 
 interface ProjectShowcaseCardProps {
   project: ShowcaseProject;
@@ -11,9 +12,6 @@ interface ProjectShowcaseCardProps {
 /**
  * Project card — dashboard preview, category badge, title, short description
  * and CTA inside a frosted glass shell.
- *
- * Every entry here is a real, live ELVAVEO product, so each renders its own
- * dashboard preview and its official logo exactly as supplied.
  */
 export default function ProjectShowcaseCard({ project }: ProjectShowcaseCardProps) {
   const categoryText = project.categoryLabel ?? project.category;
@@ -33,15 +31,17 @@ export default function ProjectShowcaseCard({ project }: ProjectShowcaseCardProp
             {categoryText}
           </span>
 
-          {/* Official brand logo, used exactly as supplied */}
-          <span className="relative h-7 w-[86px] shrink-0">
-            <Image
-              src={project.logo}
-              alt={`${project.title} logo`}
-              fill
-              sizes="86px"
-              className="object-contain object-right"
-            />
+          {/* Official brand logo */}
+          <span className="relative h-7 w-[86px] shrink-0 flex items-center justify-end">
+            {project.logo ? (
+              <img
+                src={project.logo}
+                alt={`${project.title} logo`}
+                className="h-full w-auto max-w-[86px] object-contain object-right"
+              />
+            ) : (
+              <span className="text-xs font-bold text-navy">{project.title}</span>
+            )}
           </span>
         </div>
 
@@ -59,7 +59,7 @@ export default function ProjectShowcaseCard({ project }: ProjectShowcaseCardProp
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-[13px] font-bold text-blue transition-colors hover:text-violet"
           >
-            {project.cta}
+            {project.cta || "View Project"}
             <ArrowRight
               size={14}
               aria-hidden="true"
@@ -78,8 +78,7 @@ export default function ProjectShowcaseCard({ project }: ProjectShowcaseCardProp
 }
 
 /**
- * Preview art — each product renders its own real dashboard component.
- * No generated or illustrative artwork is used on this page.
+ * Preview art — each product renders its real dashboard component.
  */
 function ProjectPreview({ project }: { project: ShowcaseProject }) {
   const wrapper = "h-full w-full overflow-hidden rounded-[12px] [&>div]:h-full";
@@ -99,7 +98,45 @@ function ProjectPreview({ project }: { project: ShowcaseProject }) {
         </div>
       );
 
+    case "camvia":
+      return (
+        <div className={wrapper}>
+          <CamviaDashboardScreenshot />
+        </div>
+      );
+
     default:
-      return null;
+      return (
+        <div className="flex h-full w-full flex-col justify-between rounded-[12px] border border-white/80 bg-white/70 p-4 backdrop-blur-md">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-blue">
+              <Sparkles size={11} />
+              Live SaaS Solution
+            </span>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-600">
+              Active
+            </span>
+          </div>
+
+          <div className="my-auto flex flex-col items-center justify-center text-center">
+            {project.logo ? (
+              <img
+                src={project.logo}
+                alt={project.title}
+                className="h-10 max-w-[140px] object-contain mb-2"
+              />
+            ) : (
+              <Layers size={32} className="text-blue mb-2" />
+            )}
+            <p className="text-[14px] font-bold text-navy">{project.title}</p>
+            <p className="text-[11px] text-muted">{project.category}</p>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-line/60 pt-2 text-[10px] text-muted">
+            <span>Production Release</span>
+            <span className="font-mono text-blue">{project.href.replace(/^https?:\/\//, "")}</span>
+          </div>
+        </div>
+      );
   }
 }

@@ -14,7 +14,7 @@ import {
   projectCapabilities,
 } from "@/data/projectShowcase";
 import { getProjects } from "@/lib/dataStore";
-import { Wallet, Layers } from "lucide-react";
+import { Wallet, Layers, GraduationCap } from "lucide-react";
 import { CONTACT_EMAIL } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = createPageMetadata({
   title: "Projects",
   description:
-    "Explore the products ELVAVEO has built — Finlo personal finance and FinloCRM, both live and open to use.",
+    "Explore the products and solutions ELVAVEO has built — Finlo personal finance, FinloCRM, and CAMVIA AI school intelligence.",
   path: "/projects",
 });
 
@@ -30,8 +30,9 @@ export default async function ProjectsPage() {
   const storedProjects = await getProjects();
   const projects = storedProjects.map((p) => ({
     ...p,
-    icon: p.id === "finlo" ? Wallet : Layers,
+    icon: p.id === "finlo" ? Wallet : p.id === "camvia" ? GraduationCap : Layers,
   }));
+
   return (
     <>
       <Navbar />
@@ -118,13 +119,12 @@ export default async function ProjectsPage() {
                   Real Products, Built and Shipped
                 </h2>
                 <p className="mt-4 text-[15px] leading-relaxed text-muted sm:text-[16px]">
-                  These are live ELVAVEO products, not mockups. Open either one
-                  to see it working.
+                  These are live ELVAVEO products and software platforms built and shipped for real-world impact.
                 </p>
               </div>
             </Reveal>
 
-            <div className="mt-8 grid gap-5 sm:grid-cols-2">
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project, index) => (
                 <Reveal key={project.id} delay={index * 0.08} className="h-full">
                   <ProjectShowcaseCard project={project} />

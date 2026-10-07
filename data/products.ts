@@ -5,7 +5,7 @@ export interface ProductStat {
 }
 
 export interface Product {
-  id: "finlo" | "finlonexa";
+  id: string;
   name: string;
   /** Official brand lockup. Replace placeholders with supplied PNGs. */
   logo: string;
@@ -77,5 +77,25 @@ export const products: Product[] = [
     ],
     accent: "violet",
     href: "https://crm.elvaveo.com",
+  },
+  {
+    id: "camvia",
+    name: "CAMVIA",
+    logo: "/brand/camvia-logo.svg",
+    badge: "An ELVAVEO Product",
+    category: "EdTech & AI",
+    headline: ["Intelligent School Management", "AI-Powered Educational Insights"],
+    accentLine: 1,
+    description:
+      "CAMVIA brings intelligence to school management with AI-powered insights, helping schools operate smarter and create brighter futures for every learner.",
+    cta: "Learn More",
+    stats: [
+      { label: "Operational Efficiency", value: "+45%", trend: "Automated" },
+      { label: "AI Insights", value: "Real-Time", trend: "Predictive" },
+      { label: "Campus Operations", value: "All-in-One", trend: "Smart LMS" },
+      { label: "Learner Success", value: "99.4%", trend: "+18%" },
+    ],
+    accent: "cyan",
+    href: "https://camvia.elvaveo.com",
   },
 ];

@@ -22,5 +22,17 @@
     "cta": "View Project",
     "iconName": "Layers",
     "isProduct": true
+  },
+  {
+    "id": "camvia",
+    "title": "CAMVIA",
+    "category": "EdTech & AI",
+    "categoryLabel": "EdTech & AI",
+    "description": "CAMVIA brings intelligence to school management with AI-powered insights, helping schools operate smarter and create brighter futures for every learner.",
+    "logo": "/brand/camvia-logo.svg",
+    "href": "https://camvia.elvaveo.com",
+    "cta": "Explore Product",
+    "iconName": "GraduationCap",
+    "isProduct": true
   }
 ]

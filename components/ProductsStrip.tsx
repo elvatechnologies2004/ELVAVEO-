@@ -4,8 +4,7 @@ import Reveal from "./Reveal";
 import { PRODUCT_LINKS } from "@/lib/constants";
 
 /**
- * Software Products strip (3-card version) — copy of the HighlightsStrip
- * pattern with three compact brand cards.
+ * Software Products strip with brand cards for ELVAVEO products ecosystem.
  */
 const brands = [
   {
@@ -25,7 +24,15 @@ const brands = [
     href: "https://crm.elvaveo.com",
   },
   {
-    title: "ELVAVEO",
+    title: "CAMVIA",
+    description:
+      "Intelligence in school management with AI-powered insights, helping educational institutions operate smarter for every learner.",
+    chip: "EdTech & AI",
+    cta: "Learn More",
+    href: "https://camvia.elvaveo.com",
+  },
+  {
+    title: "ELVAVEO Studio",
     description:
       "The software studio behind these products — ideas, products, people, and a brighter tomorrow.",
     chip: "Studio",
@@ -40,7 +47,7 @@ export default function ProductsStrip() {
       <div className="mx-auto w-full max-w-[1520px] px-5 sm:px-8 lg:px-12">
         <Reveal>
           <div className="shadow-card relative overflow-hidden rounded-[24px] ring-1 ring-white/70 backdrop-blur-2xl lg:min-h-[240px]">
-            <div className="grid lg:grid-cols-[minmax(240px,0.28fr)_minmax(0,0.72fr)]">
+            <div className="grid lg:grid-cols-[minmax(240px,0.24fr)_minmax(0,0.76fr)]">
               {/* intro block */}
               <div className="flex min-h-[200px] flex-col justify-center border-b border-line p-5 sm:p-7 lg:min-h-[258.3px] lg:border-b-0 lg:border-r">
                 <p className="eyebrow text-[10.5px]">Our Products</p>
@@ -48,13 +55,12 @@ export default function ProductsStrip() {
                   Software Products for a Smarter Tomorrow
                 </h2>
                 <p className="mt-2 max-w-[300px] text-[13px] leading-snug text-muted">
-                  Three products and platforms — one team building real
-                  solutions for real problems.
+                  Purpose-built SaaS platforms and software solutions designed and run in-house.
                 </p>
               </div>
 
-              {/* 3 brand cards */}
-              <div className="grid grid-cols-1 gap-4 p-3.5 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
+              {/* brand cards */}
+              <div className="grid grid-cols-1 gap-4 p-3.5 sm:grid-cols-2 lg:grid-cols-4">
                 {brands.map((b) => (
                   <div
                     key={b.title}
@@ -67,7 +73,7 @@ export default function ProductsStrip() {
                       <h3 className="mt-3.5 text-[17px] font-extrabold text-navy sm:text-[18.5px]">
                         {b.title}
                       </h3>
-                      <p className="mt-2 text-[13.5px] leading-relaxed text-muted sm:text-[14px]">
+                      <p className="mt-2 text-[13px] leading-relaxed text-muted line-clamp-4">
                         {b.description}
                       </p>
                     </div>

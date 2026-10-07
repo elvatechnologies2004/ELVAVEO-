@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Upload,
   Image as ImageIcon,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { products as initialProducts, type Product } from "@/data/products";
@@ -25,20 +27,26 @@ export default function AdminProducts() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const [isDrafting, setIsDrafting] = useState(false);
   const [draftProduct, setDraftProduct] = useState({
     name: "",
     category: "AI & Automation",
+    headlineLine1: "",
+    headlineLine2: "",
     description: "",
     url: "",
-    logo: "/brand/elvaveo-logo.3d7b3289.png",
+    logo: "/brand/camvia-logo.svg",
+    stats1Label: "Operational Efficiency",
+    stats1Value: "+45%",
+    stats2Label: "AI Insights",
+    stats2Value: "Real-Time",
   });
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const fetchProducts = async () => {
@@ -50,9 +58,12 @@ export default function AdminProducts() {
         if (data.products && Array.isArray(data.products)) {
           setProductList(data.products);
         }
+      } else {
+        showToast("Could not load products from server", "error");
       }
     } catch (err) {
       console.error("Failed to load products:", err);
+      showToast("Network error fetching products", "error");
     } finally {
       setIsLoading(false);
     }
@@ -66,6 +77,11 @@ export default function AdminProducts() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 8 * 1024 * 1024) {
+      showToast("File is too large. Max size is 8MB.", "error");
+      return;
+    }
+
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -76,37 +92,17 @@ export default function AdminProducts() {
         body: formData,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          setDraftProduct((prev) => ({ ...prev, logo: data.url }));
-          showToast("Logo uploaded successfully!");
-        }
+      const data = await res.json();
+
+      if (res.ok && data.url) {
+        setDraftProduct((prev) => ({ ...prev, logo: data.url }));
+        showToast("Logo uploaded successfully!", "success");
       } else {
-        const reader = new FileReader();
-        reader.onload = (uploadEvent) => {
-          if (uploadEvent.target?.result) {
-            setDraftProduct((prev) => ({
-              ...prev,
-              logo: String(uploadEvent.target?.result),
-            }));
-            showToast("Logo preview loaded!");
-          }
-        };
-        reader.readAsDataURL(file);
+        showToast(data.error || "Failed to upload logo file.", "error");
       }
-    } catch {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          setDraftProduct((prev) => ({
-            ...prev,
-            logo: String(uploadEvent.target?.result),
-          }));
-          showToast("Logo preview loaded!");
-        }
-      };
-      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Upload error:", err);
+      showToast("Failed to connect to file upload service.", "error");
     } finally {
       setIsUploading(false);
     }
@@ -114,27 +110,61 @@ export default function AdminProducts() {
 
   const handleAddDraft = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!draftProduct.name || !draftProduct.description) return;
+    const trimmedName = draftProduct.name.trim();
+    const trimmedDesc = draftProduct.description.trim();
+
+    if (!trimmedName || !trimmedDesc) {
+      showToast("Product name and description are required.", "error");
+      return;
+    }
+
+    // Auto-normalize URL
+    let finalUrl = draftProduct.url.trim();
+    if (!finalUrl) {
+      finalUrl = `https://${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "")}.elvaveo.com`;
+    } else if (!/^https?:\/\//i.test(finalUrl)) {
+      finalUrl = `https://${finalUrl}`;
+    }
+
+    const slugId = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "-") || `custom-${Date.now()}`;
 
     const newProd: Product = {
-      id: `custom-${Date.now()}` as any,
-      name: draftProduct.name,
+      id: slugId,
+      name: trimmedName,
       logo: draftProduct.logo || "/brand/elvaveo-logo.3d7b3289.png",
       badge: "An ELVAVEO Product",
-      category: draftProduct.category,
-      headline: [draftProduct.name, "Next Generation Platform"],
+      category: draftProduct.category.trim() || "AI & Automation",
+      headline: [
+        draftProduct.headlineLine1.trim() || trimmedName,
+        draftProduct.headlineLine2.trim() || "Next-Generation Intelligence",
+      ],
       accentLine: 1,
-      description: draftProduct.description,
+      description: trimmedDesc,
       cta: "Learn More",
       stats: [
-        { label: "Status", value: "Active Dev" },
-        { label: "Platform", value: "Cloud SaaS" },
+        {
+          label: draftProduct.stats1Label.trim() || "Efficiency",
+          value: draftProduct.stats1Value.trim() || "+45%",
+          trend: "Active",
+        },
+        {
+          label: draftProduct.stats2Label.trim() || "AI Insights",
+          value: draftProduct.stats2Value.trim() || "Real-Time",
+          trend: "Predictive",
+        },
+        { label: "Architecture", value: "Cloud SaaS", trend: "Fast" },
+        { label: "Status", value: "Production", trend: "99.9%" },
       ],
       accent: "cyan",
-      href: draftProduct.url || "https://elvaveo.com",
+      href: finalUrl,
     };
 
-    const updated = [...productList, newProd];
+    // Replace if id matches or append
+    const existingIndex = productList.findIndex((p) => p.id === newProd.id);
+    const updated = existingIndex >= 0
+      ? productList.map((p, idx) => (idx === existingIndex ? newProd : p))
+      : [...productList, newProd];
+
     setIsSaving(true);
     try {
       const res = await fetch("/api/admin/products", {
@@ -143,23 +173,60 @@ export default function AdminProducts() {
         body: JSON.stringify(updated),
       });
 
-      if (res.ok) {
-        setProductList(updated);
-        showToast(`Added ${newProd.name}! Products updated live on website.`);
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setProductList(data.products || updated);
+        showToast(`Added ${newProd.name}! Products updated live on website.`, "success");
         setIsDrafting(false);
         setDraftProduct({
           name: "",
           category: "AI & Automation",
+          headlineLine1: "",
+          headlineLine2: "",
           description: "",
           url: "",
-          logo: "/brand/elvaveo-logo.3d7b3289.png",
+          logo: "/brand/camvia-logo.svg",
+          stats1Label: "Operational Efficiency",
+          stats1Value: "+45%",
+          stats2Label: "AI Insights",
+          stats2Value: "Real-Time",
         });
       } else {
-        showToast("Failed to save product.");
+        showToast(data.error || "Failed to save product.", "error");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving product:", err);
-      showToast("Failed to save product.");
+      showToast(err?.message || "Failed to save product.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to remove "${name}" from live products?`)) {
+      return;
+    }
+
+    const updated = productList.filter((p) => p.id !== id);
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProductList(data.products || updated);
+        showToast(`Removed "${name}" from live products.`, "success");
+      } else {
+        showToast(data.error || "Failed to delete product.", "error");
+      }
+    } catch (err: any) {
+      console.error("Error deleting product:", err);
+      showToast("Error communicating with products server.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -169,9 +236,19 @@ export default function AdminProducts() {
     <div className="space-y-6">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-24 right-8 z-50 flex items-center gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/90 px-5 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-xl animate-in fade-in slide-in-from-top-4">
-          <CheckCircle2 size={18} />
-          <span>{toastMessage}</span>
+        <div
+          className={`fixed top-24 right-8 z-50 flex items-center gap-2.5 rounded-2xl border px-5 py-3 text-sm font-bold shadow-xl backdrop-blur-xl animate-in fade-in slide-in-from-top-4 ${
+            toastMessage.type === "success"
+              ? "border-emerald-500/30 bg-emerald-500/90 text-white"
+              : "border-rose-500/30 bg-rose-500/95 text-white"
+          }`}
+        >
+          {toastMessage.type === "success" ? (
+            <CheckCircle2 size={18} />
+          ) : (
+            <AlertCircle size={18} />
+          )}
+          <span>{toastMessage.text}</span>
         </div>
       )}
 
@@ -215,85 +292,92 @@ export default function AdminProducts() {
             className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan via-blue to-violet px-4 text-xs font-bold text-white shadow-md transition hover:opacity-95"
           >
             <Plus size={16} />
-            <span>Draft New Product</span>
+            <span>Add New Product</span>
           </button>
         </div>
       </div>
 
       {/* Product Cards Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {productList.map((prod) => (
           <article
             key={prod.id}
-            className="glass group relative overflow-hidden rounded-[26px] p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:bg-white/95"
+            className="glass group relative flex flex-col justify-between overflow-hidden rounded-[26px] p-6 shadow-card transition duration-300 hover:-translate-y-1 hover:bg-white/95"
           >
-            {/* Top row with Logo and Live App link */}
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3.5">
-                {/* Product Logo / Icon Container */}
-                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/90 bg-white/80 p-2 shadow-xs">
-                  {prod.logo ? (
-                    // Using img for absolute/relative compatibility with uploads & svgs
-                    <img
-                      src={prod.logo}
-                      alt={prod.name}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <Layers size={24} className="text-blue" />
-                  )}
+            <div>
+              {/* Top row with Logo and Live App link */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3.5">
+                  {/* Product Logo Container */}
+                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/90 bg-white/80 p-2 shadow-xs">
+                    {prod.logo ? (
+                      <img
+                        src={prod.logo}
+                        alt={prod.name}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <Layers size={24} className="text-blue" />
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="rounded-full bg-blue/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue">
+                      {prod.category}
+                    </span>
+                    <h3 className="mt-1 text-[20px] font-extrabold text-navy">
+                      {prod.name}
+                    </h3>
+                  </div>
                 </div>
 
-                <div>
-                  <span className="rounded-full bg-blue/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue">
-                    {prod.category}
-                  </span>
-                  <h3 className="mt-1 text-[20px] font-extrabold text-navy">
-                    {prod.name}
-                  </h3>
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href={prod.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded-xl border border-blue/20 bg-white/80 px-2.5 py-1.5 text-xs font-bold text-blue shadow-sm hover:bg-blue hover:text-white transition-colors"
+                  >
+                    <span>Visit</span>
+                    <ArrowUpRight size={13} />
+                  </a>
+
+                  {/* Delete button (protected for built-in or custom) */}
+                  <button
+                    onClick={() => handleDeleteProduct(prod.id, prod.name)}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                    title="Delete product"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
 
-              <a
-                href={prod.href}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-xl border border-blue/20 bg-white/80 px-3 py-1.5 text-xs font-bold text-blue shadow-sm hover:bg-blue hover:text-white transition-colors"
-              >
-                <span>Live App</span>
-                <ArrowUpRight size={14} />
-              </a>
-            </div>
-
-            {/* Headline & Description */}
-            <p className="mt-4 text-[14px] font-semibold text-navy/80">
-              {prod.headline.join(" ")}
-            </p>
-            <p className="mt-2 text-[13px] leading-relaxed text-muted">
-              {prod.description}
-            </p>
-
-            {/* Stats preview box */}
-            <div className="mt-6 rounded-2xl border border-white/90 bg-white/60 p-4 backdrop-blur-md">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                Product Metrics &amp; Performance
+              {/* Headline & Description */}
+              <p className="mt-4 text-[14px] font-semibold text-navy/80">
+                {prod.headline.join(" ")}
               </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {prod.stats.map((stat, idx) => (
-                  <div key={idx} className="rounded-xl bg-white/70 p-2.5 shadow-xs">
-                    <p className="text-[10px] font-medium text-muted truncate">
-                      {stat.label}
-                    </p>
-                    <p className="mt-1 text-[13px] font-bold text-navy truncate">
-                      {stat.value}
-                    </p>
-                    {stat.trend && (
-                      <span className="text-[9.5px] font-semibold text-emerald-600">
-                        {stat.trend}
-                      </span>
-                    )}
-                  </div>
-                ))}
+              <p className="mt-2 text-[13px] leading-relaxed text-muted line-clamp-3">
+                {prod.description}
+              </p>
+
+              {/* Stats preview box */}
+              <div className="mt-5 rounded-2xl border border-white/90 bg-white/60 p-3.5 backdrop-blur-md">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+                  Product Metrics &amp; Performance
+                </p>
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  {prod.stats.slice(0, 4).map((stat, idx) => (
+                    <div key={idx} className="rounded-xl bg-white/80 p-2 shadow-xs">
+                      <p className="text-[9.5px] font-medium text-muted truncate">
+                        {stat.label}
+                      </p>
+                      <p className="mt-0.5 text-[12.5px] font-bold text-navy truncate">
+                        {stat.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -301,10 +385,10 @@ export default function AdminProducts() {
             <div className="mt-5 flex items-center justify-between border-t border-blue/10 pt-4 text-xs text-muted">
               <span className="flex items-center gap-1.5 font-semibold text-emerald-600">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Active Production
+                Live on Website
               </span>
-              <span className="font-mono text-[11px] text-blue truncate max-w-[200px]">
-                {prod.href}
+              <span className="font-mono text-[11px] text-blue truncate max-w-[170px]">
+                {prod.href.replace(/^https?:\/\//, "")}
               </span>
             </div>
           </article>
@@ -322,18 +406,18 @@ export default function AdminProducts() {
               <X size={18} />
             </button>
 
-            <h3 className="text-[18px] font-bold text-navy">Draft New Product</h3>
+            <h3 className="text-[18px] font-bold text-navy">Add New Product</h3>
             <p className="mt-1 text-[13px] text-muted">
-              Propose or add a new digital product to ELVAVEO with custom logo and details.
+              Publish a new proprietary digital product to ELVAVEO. It will be immediately live across all public pages.
             </p>
 
             <form onSubmit={handleAddDraft} className="mt-5 space-y-4">
               <div>
-                <label className="text-xs font-bold text-navy">Product Name</label>
+                <label className="text-xs font-bold text-navy">Product Name *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. FinloAI, OmniDesk"
+                  placeholder="e.g. CAMVIA, FinloAI"
                   value={draftProduct.name}
                   onChange={(e) =>
                     setDraftProduct({ ...draftProduct, name: e.target.value })
@@ -348,7 +432,7 @@ export default function AdminProducts() {
                   <label className="text-xs font-bold text-navy">Product Logo</label>
                   {isUploading && (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-blue">
-                      <RefreshCw size={12} className="animate-spin" /> Uploading...
+                      <RefreshCw size={12} className="animate-spin" /> Uploading image...
                     </span>
                   )}
                 </div>
@@ -372,7 +456,7 @@ export default function AdminProducts() {
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue/20 bg-white px-3 py-1.5 text-xs font-bold text-blue hover:bg-blue/5 transition-colors shadow-xs">
                         <Upload size={13} />
-                        <span>Upload Logo (PNG, SVG, JPG)</span>
+                        <span>Upload Logo File (SVG, PNG, JPG)</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -384,7 +468,7 @@ export default function AdminProducts() {
 
                     <input
                       type="text"
-                      placeholder="e.g. /brand/finlo-logo.svg or https://..."
+                      placeholder="e.g. /brand/camvia-logo.svg or /uploads/..."
                       value={draftProduct.logo}
                       onChange={(e) =>
                         setDraftProduct({ ...draftProduct, logo: e.target.value })
@@ -398,6 +482,7 @@ export default function AdminProducts() {
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-[10.5px] font-semibold text-muted">Presets:</span>
                   {[
+                    { label: "CAMVIA Logo", path: "/brand/camvia-logo.svg" },
                     { label: "Finlo Logo", path: "/brand/finlo-logo.svg" },
                     { label: "FinloCRM Logo", path: "/brand/finlocrm-logo.png" },
                     { label: "ELVAVEO Brand", path: "/brand/elvaveo-logo.3d7b3289.png" },
@@ -423,7 +508,7 @@ export default function AdminProducts() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. FinTech, AI Agent, Productivity"
+                  placeholder="e.g. EdTech & AI, FinTech, Productivity"
                   value={draftProduct.category}
                   onChange={(e) =>
                     setDraftProduct({ ...draftProduct, category: e.target.value })
@@ -433,10 +518,10 @@ export default function AdminProducts() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-navy">Product Subdomain / URL</label>
+                <label className="text-xs font-bold text-navy">Product Website / Subdomain</label>
                 <input
-                  type="url"
-                  placeholder="https://app.elvaveo.com"
+                  type="text"
+                  placeholder="e.g. camvia.elvaveo.com or https://..."
                   value={draftProduct.url}
                   onChange={(e) =>
                     setDraftProduct({ ...draftProduct, url: e.target.value })
@@ -446,11 +531,11 @@ export default function AdminProducts() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-navy">Description</label>
+                <label className="text-xs font-bold text-navy">Description *</label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="What does this product solve and who is it for?"
+                  placeholder="What does this product do and who does it help?"
                   value={draftProduct.description}
                   onChange={(e) =>
                     setDraftProduct({ ...draftProduct, description: e.target.value })
@@ -459,7 +544,52 @@ export default function AdminProducts() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-navy">Metric 1</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Operational Efficiency"
+                    value={draftProduct.stats1Label}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, stats1Label: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-xl border border-blue/20 bg-ice px-3 py-2 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Value (e.g. +45%)"
+                    value={draftProduct.stats1Value}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, stats1Value: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3 py-2 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-navy">Metric 2</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. AI Insights"
+                    value={draftProduct.stats2Label}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, stats2Label: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-xl border border-blue/20 bg-ice px-3 py-2 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Value (e.g. Real-Time)"
+                    value={draftProduct.stats2Value}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, stats2Value: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3 py-2 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setIsDrafting(false)}
@@ -472,7 +602,7 @@ export default function AdminProducts() {
                   disabled={isSaving || isUploading}
                   className="rounded-xl bg-gradient-to-r from-cyan via-blue to-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
                 >
-                  {isSaving ? "Saving Live..." : "Add & Save Live"}
+                  {isSaving ? "Saving Live..." : "Publish & Save Live"}
                 </button>
               </div>
             </form>
