@@ -265,7 +265,7 @@ export default function ContactPage() {
                   </p>
                   <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                     <GradientButton
-                      href={`mailto:${CONTACT_EMAIL}?subject=Start%20a%20Project`}
+                      href="#message"
                       size="lg"
                       showArrow
                       className="w-full sm:w-auto"
@@ -273,7 +273,7 @@ export default function ContactPage() {
                       Get Started
                     </GradientButton>
                     <GradientButton
-                      href={`mailto:${CONTACT_EMAIL}`}
+                      href="#message"
                       variant="outline"
                       size="lg"
                       className="w-full sm:w-auto"

@@ -495,7 +495,7 @@ export default async function AboutPage() {
                   </p>
                   <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                     <GradientButton
-                      href="/#contact"
+                      href="/contact"
                       size="lg"
                       showArrow
                       className="w-full sm:w-auto"
@@ -503,7 +503,7 @@ export default async function AboutPage() {
                       Get Started
                     </GradientButton>
                     <GradientButton
-                      href="/#contact"
+                      href="/contact"
                       variant="outline"
                       size="lg"
                       className="w-full sm:w-auto"

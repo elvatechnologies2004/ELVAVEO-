@@ -350,10 +350,10 @@ export default function ServicesPage() {
                     Partner with ELVAVEO and let’s create digital solutions that make a real impact.
                   </p>
                   <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-                    <GradientButton href={`mailto:${CONTACT_EMAIL}?subject=Start%20a%20Project`} size="lg" showArrow className="w-full sm:w-auto">
+                    <GradientButton href="/contact" size="lg" showArrow className="w-full sm:w-auto">
                       Get Started
                     </GradientButton>
-                    <GradientButton href={`mailto:${CONTACT_EMAIL}`} variant="outline" size="lg" className="w-full sm:w-auto">
+                    <GradientButton href="/contact" variant="outline" size="lg" className="w-full sm:w-auto">
                       Contact Us
                     </GradientButton>
                   </div>

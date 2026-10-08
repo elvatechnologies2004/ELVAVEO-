@@ -241,7 +241,7 @@ export default async function ProjectsPage() {
 
                   <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:gap-4">
                     <GradientButton
-                      href={`mailto:${CONTACT_EMAIL}?subject=Start%20a%20Project`}
+                      href="/contact"
                       size="lg"
                       showArrow
                       className="w-full sm:w-auto"
@@ -249,7 +249,7 @@ export default async function ProjectsPage() {
                       Start Your Project
                     </GradientButton>
                     <GradientButton
-                      href={`mailto:${CONTACT_EMAIL}`}
+                      href="/contact"
                       variant="outline"
                       size="lg"
                       className="w-full sm:w-auto"

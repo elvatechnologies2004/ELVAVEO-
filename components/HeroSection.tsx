@@ -50,7 +50,7 @@ export default function HeroSection() {
             </p>
 
             <div className="mt-[clamp(20px,4vh,32px)] flex flex-col gap-3 sm:flex-row sm:gap-4">
-              <GradientButton href="#contact" size="lg" showArrow className="w-full sm:w-auto">
+              <GradientButton href="/contact" size="lg" showArrow className="w-full sm:w-auto">
                 Start Your Project
               </GradientButton>
               <GradientButton

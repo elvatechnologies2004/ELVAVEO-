@@ -84,6 +84,7 @@ export default function GradientButton({
     return (
       <Link
         href={href}
+        onClick={onClick}
         className={classes}
         aria-label={ariaLabel}
         target={target}

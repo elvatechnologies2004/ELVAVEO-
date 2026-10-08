@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleCheck, LoaderCircle, Send } from "lucide-react";
 import GradientButton from "@/components/GradientButton";
 import { CONTACT_EMAIL } from "@/lib/constants";
@@ -31,6 +31,16 @@ export default function ContactForm() {
   // clickable address instead of a dead end.
   const [emailFallback, setEmailFallback] = useState(false);
   const [status, setStatus] = useState<ContactFormStatus>("idle");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const sub = params.get("subject");
+      if (sub && CONTACT_SUBJECTS.includes(sub as any)) {
+        setSubject(sub);
+      }
+    }
+  }, []);
 
   const sending = status === "sending";
 

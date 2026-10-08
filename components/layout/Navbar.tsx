@@ -15,16 +15,13 @@ import { BRAND_LOGO } from "@/lib/constants";
  * Top navigation — soft glass bar, ~72px tall, underline on the active page.
  */
 
-/** Routes that render their own in-page contact section. */
-const routesWithContactSection = new Set(["/", "/services", "/projects"]);
-
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [hash, setHash] = useState<string>("");
   const pathname = usePathname();
-  // Pages without their own contact block send people to the dedicated route.
-  const contactHref = routesWithContactSection.has(pathname) ? "#contact" : "/contact";
+  // Navigate to dedicated contact route, or scroll to message form if already on /contact
+  const contactHref = pathname === "/contact" ? "#message" : "/contact";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
