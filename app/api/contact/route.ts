@@ -107,9 +107,31 @@ export async function POST(request: Request) {
   }
 
   const recipient = process.env.CONTACT_EMAIL?.trim() || "hello@elvaveo.com";
+  const smtpPass = process.env.SMTP_PASS?.trim() || process.env.SMTP_PASSWORD?.trim();
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
 
-  // 2. Dispatch via Resend API if API Key is available
+  // 2. Dispatch via SMTP (Python smtplib primary, Node SMTP fallback) if SMTP is configured
+  if (smtpPass) {
+    try {
+      const smtpResult = await sendEmailViaSMTP({
+        name,
+        email,
+        subject,
+        message,
+        to: recipient,
+      });
+
+      if (smtpResult.success) {
+        console.log(`[contact] Email sent successfully via SMTP (${smtpResult.method}) to ${recipient}`);
+        return json({ success: true, message: "Message sent successfully." }, 200);
+      }
+      console.warn("[contact] SMTP dispatch failed, trying Resend fallback if available:", smtpResult.error);
+    } catch (smtpErr) {
+      console.error("[contact] SMTP execution error:", smtpErr);
+    }
+  }
+
+  // 3. Dispatch via Resend API if API Key is available
   if (resendApiKey) {
     const from = process.env.RESEND_FROM_EMAIL?.trim() || "ELVAVEO <hello@elvaveo.com>";
     const text = [
@@ -152,60 +174,9 @@ export async function POST(request: Request) {
         console.log(`[contact] Email delivered via Resend to ${recipient}`);
         return json({ success: true, message: "Message sent successfully." }, 200);
       }
-
-      const detail = await resendResponse.text();
-      console.warn(`[contact] Resend attempt returned (${resendResponse.status}): ${detail}`);
-
-      // If domain is not verified yet, attempt testing email fallback
-      if (
-        resendResponse.status === 403 &&
-        detail.includes("You can only send testing emails to your own email address")
-      ) {
-        const match = detail.match(/\(([^)]+@[^)]+)\)/);
-        if (match && match[1]) {
-          const fallbackEmail = match[1];
-          const retryResponse = await fetch(RESEND_ENDPOINT, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${resendApiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              from: "ELVAVEO <onboarding@resend.dev>",
-              to: [fallbackEmail],
-              reply_to: email,
-              subject: `[${subject}] ${name}`,
-              text,
-              html,
-            }),
-          });
-          if (retryResponse.ok) {
-            console.log(`[contact] Delivered to Resend sandbox account: ${fallbackEmail}`);
-            return json({ success: true, message: "Message sent successfully." }, 200);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[contact] Resend API request failed, trying SMTP fallback:", err);
+    } catch (resendErr) {
+      console.warn("[contact] Resend API request failed:", resendErr);
     }
-  }
-
-  // 3. SMTP Fallback (Python smtplib primary, Node SMTP secondary)
-  try {
-    const smtpResult = await sendEmailViaSMTP({
-      name,
-      email,
-      subject,
-      message,
-      to: recipient,
-    });
-
-    if (smtpResult.success) {
-      console.log(`[contact] Email sent via SMTP (${smtpResult.method}) to ${recipient}`);
-      return json({ success: true, message: "Message sent successfully." }, 200);
-    }
-  } catch (smtpErr) {
-    console.error("[contact] SMTP fallback also failed:", smtpErr);
   }
 
   // Inquiry is safely recorded in admin database even if outward notification encountered issue
