@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { ProductStat } from "@/data/products";
 
-export default function CamviaMockup({ stats }: { stats: ProductStat[] }) {
+export default function CamviaMockup({ stats }: { stats?: ProductStat[] }) {
   const insightMetrics = [
     { label: "Smart Attendance", value: "98.2%", tone: "from-cyan to-blue" },
     { label: "LMS Engagement", value: "94.6%", tone: "from-blue to-violet" },
@@ -65,9 +65,9 @@ export default function CamviaMockup({ stats }: { stats: ProductStat[] }) {
 
           {/* Stat Tiles */}
           <div className="grid grid-cols-2 gap-1.5">
-            {stats.map((s) => (
+            {(stats || []).map((s, idx) => (
               <div
-                key={s.label}
+                key={s.label || idx}
                 className="rounded-xl border border-line bg-white p-2 shadow-[0_6px_18px_-14px_rgba(8,27,61,0.3)]"
               >
                 <p className="text-[8.5px] font-semibold uppercase tracking-wide text-muted">

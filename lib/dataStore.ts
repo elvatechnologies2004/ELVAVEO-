@@ -40,13 +40,78 @@ export async function saveTeamMembers(members: TeamMember[]): Promise<boolean> {
   return writeJson(TEAM_FILE, members);
 }
 
+const PRODUCTS_TS_FILE = path.join(DATA_DIR, "products.ts");
+
+function formatProductsTs(productsList: Product[]): string {
+  return `export interface ProductStat {
+  label: string;
+  value: string;
+  trend?: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  /** Official brand lockup. Replace placeholders with supplied PNGs. */
+  logo: string;
+  /** Badge shown above the headline */
+  badge: string;
+  /** Category pill */
+  category: string;
+  /** Headline rendered across up to two lines */
+  headline: string[];
+  /** Second headline line receives the gradient accent */
+  accentLine: number;
+  description: string;
+  cta: string;
+  /** Demo stats used inside the product mockups. All placeholder data. */
+  stats: ProductStat[];
+  /** Mockup accent */
+  accent: "cyan" | "violet";
+  /**
+   * Live product site. These are real, publicly reachable ELVAVEO products,
+   * so the cards link straight to them rather than to an internal page.
+   */
+  href: string;
+}
+
+/**
+ * ELVAVEO products.
+ *
+ * Kept in sync with admin console and data/products.json.
+ */
+export const products: Product[] = ${JSON.stringify(productsList, null, 2)};
+`;
+}
+
 // ==================== PRODUCTS ====================
 export async function getProducts(): Promise<Product[]> {
-  return readJson<Product[]>(PRODUCTS_FILE, defaultProducts);
+  const stored = await readJson<Product[] | null>(PRODUCTS_FILE, null);
+  if (!stored || !Array.isArray(stored) || stored.length === 0) {
+    return defaultProducts;
+  }
+  // Check if defaultProducts in products.ts has items not in stored
+  const storedIds = new Set(stored.map((p) => p.id));
+  const newFromCode = defaultProducts.filter((p) => !storedIds.has(p.id));
+  if (newFromCode.length > 0) {
+    const merged = [...stored, ...newFromCode];
+    await writeJson(PRODUCTS_FILE, merged);
+    try {
+      await fs.writeFile(PRODUCTS_TS_FILE, formatProductsTs(merged), "utf-8");
+    } catch {}
+    return merged;
+  }
+  return stored;
 }
 
 export async function saveProducts(products: Product[]): Promise<boolean> {
-  return writeJson(PRODUCTS_FILE, products);
+  const jsonSaved = await writeJson(PRODUCTS_FILE, products);
+  try {
+    await fs.writeFile(PRODUCTS_TS_FILE, formatProductsTs(products), "utf-8");
+  } catch (err) {
+    console.error("Failed to sync products.ts:", err);
+  }
+  return jsonSaved;
 }
 
 // ==================== PROJECTS ====================

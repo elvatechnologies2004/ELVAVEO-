@@ -3,52 +3,30 @@ import fs from "fs/promises";
 import path from "path";
 import { CONTACT_SUBJECTS, type ContactApiResponse } from "@/types";
 import { CONTACT_EMAIL as DEFAULT_CONTACT_EMAIL } from "@/lib/constants";
-
-/**
- * Contact form endpoint.
- *
- * Accepts a JSON submission and delivers it to the ELVAVEO inbox through the
- * Resend API. The API key is read only here, on the server, and is never
- * exposed to the browser.
- */
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { z } from "zod";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
-/** Per-field caps, so one request cannot produce an oversized email. */
-const LIMITS = {
-  name: 120,
-  email: 254,
-  subject: 120,
-  message: 5000,
-} as const;
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-type ContactPayload = {
-  name?: unknown;
-  email?: unknown;
-  subject?: unknown;
-  message?: unknown;
-  /** Honeypot. Hidden from people, tempting to bots. */
-  company?: unknown;
-};
-
-/** Allow-list of accepted topics. Anything else is rejected, not forwarded. */
-const ALLOWED_SUBJECTS: readonly string[] = CONTACT_SUBJECTS;
+const ContactSchema = z.object({
+  name: z.string().trim().min(1, "Please provide your name.").max(120),
+  email: z.string().trim().email("Please enter a valid email address.").max(254),
+  subject: z.string().refine((val) => (CONTACT_SUBJECTS as readonly string[]).includes(val), {
+    message: "Please choose one of the listed topics.",
+  }),
+  message: z.string().trim().min(5, "Message must be at least 5 characters.").max(5000),
+  company: z.string().trim().max(200).optional(), // Honeypot
+});
 
 function json(body: ContactApiResponse, status: number) {
   return NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "no-store, max-age=0" },
   });
 }
 
 function fail(message: string, status: number) {
   return json({ success: false, message, error: message }, status);
-}
-
-function readField(value: unknown, max: number): string {
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
 function escapeHtml(value: string): string {
@@ -61,44 +39,59 @@ function escapeHtml(value: string): string {
 }
 
 export async function POST(request: Request) {
-  let body: ContactPayload;
+  const ip = getClientIp(request);
 
-  try {
-    body = (await request.json()) as ContactPayload;
-  } catch {
-    return fail("Invalid request.", 400);
+  // Rate Limiting: 5 submissions per 15 minutes (900 seconds) per IP
+  const rateLimitResult = checkRateLimit(`contact:${ip}`, 5, 900);
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: `Too many submissions. Please wait ${rateLimitResult.resetSeconds} seconds before sending another message.`,
+        error: "Rate limit exceeded",
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": rateLimitResult.resetSeconds.toString(),
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   }
 
-  // A filled honeypot means a bot. Report success so it stops trying, but send
-  // nothing.
-  if (readField(body.company, 200)) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return fail("Invalid JSON payload.", 400);
+  }
+
+  const parsed = ContactSchema.safeParse(body);
+  if (!parsed.success) {
+    return fail(parsed.error.issues[0]?.message || "Invalid contact form data.", 400);
+  }
+
+  const { name, email, subject, message, company } = parsed.data;
+
+  // Honeypot check: If the hidden 'company' field is filled, silently succeed (bot sink)
+  if (company && company.trim().length > 0) {
     return json({ success: true, message: "Message sent successfully." }, 200);
   }
 
-  const name = readField(body.name, LIMITS.name);
-  const email = readField(body.email, LIMITS.email);
-  const subject = readField(body.subject, LIMITS.subject);
-  const message = readField(body.message, LIMITS.message);
-
-  if (!name || !email || !message) {
-    return fail("Please fill in your name, email, and message.", 400);
-  }
-
-  if (!EMAIL_PATTERN.test(email)) {
-    return fail("Please enter a valid email address.", 400);
-  }
-
-  if (!ALLOWED_SUBJECTS.includes(subject)) {
-    return fail("Please choose one of the listed topics.", 400);
-  }
-
-  // Store inquiry for the Admin Panel so submissions are never lost
+  // Store inquiry safely in data/inquiries.json (bounded to 500 items max)
   try {
     const inquiriesPath = path.join(process.cwd(), "data", "inquiries.json");
     const raw = await fs.readFile(inquiriesPath, "utf-8").catch(() => "[]");
-    const currentList = JSON.parse(raw);
+    let currentList: any[] = [];
+    try {
+      currentList = JSON.parse(raw);
+    } catch {
+      currentList = [];
+    }
+
     currentList.unshift({
-      id: `inq-${Date.now()}`,
+      id: `inq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name,
       email,
       subject,
@@ -106,7 +99,9 @@ export async function POST(request: Request) {
       status: "new",
       createdAt: new Date().toISOString(),
     });
-    await fs.writeFile(inquiriesPath, JSON.stringify(currentList, null, 2), "utf-8");
+
+    const bounded = currentList.slice(0, 500);
+    await fs.writeFile(inquiriesPath, JSON.stringify(bounded, null, 2), "utf-8");
   } catch (err) {
     console.error("[contact] Failed to store inquiry in admin data:", err);
   }
@@ -114,11 +109,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-    // Logged server-side only. The visitor gets a safe, actionable message and
-    // the client turns the 503 into a clickable mailto link. The email address
-    // is deliberately left out of the string so the UI can render it as a real
-    // link rather than dead text.
-    console.error("[contact] RESEND_API_KEY is missing - email not sent.");
+    console.warn("[contact] RESEND_API_KEY is not configured in environment variables.");
     return fail(
       "Our contact form is temporarily unavailable. Please email us directly using the link below.",
       503
@@ -126,9 +117,6 @@ export async function POST(request: Request) {
   }
 
   const contactEmail = process.env.CONTACT_EMAIL?.trim() || DEFAULT_CONTACT_EMAIL;
-
-  // Until elvaveo.com is verified in Resend, only the onboarding address is
-  // allowed as a sender.
   const from =
     process.env.RESEND_FROM_EMAIL?.trim() || "ELVAVEO <onboarding@resend.dev>";
 
@@ -161,7 +149,6 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         from,
         to: [contactEmail],
-        // Replying to the notification lands in the visitor's own inbox.
         reply_to: email,
         subject: `[${subject}] ${name}`,
         text,
@@ -170,15 +157,10 @@ export async function POST(request: Request) {
     });
 
     if (!resendResponse.ok) {
-      // Provider detail stays in the server log, never in the response body.
       const detail = await resendResponse.text();
-      console.error(
-        `[contact] Resend rejected the send (${resendResponse.status}): ${detail}`
-      );
+      console.error(`[contact] Resend error (${resendResponse.status}): ${detail}`);
 
-      // In Resend onboarding/test mode without a verified domain, emails can only
-      // be sent to the registered account owner. If rejected for this reason,
-      // extract the authorized email and safely retry delivery.
+      // Handle Resend unverified domain sandbox fallback
       if (
         resendResponse.status === 403 &&
         detail.includes("You can only send testing emails to your own email address")
@@ -186,9 +168,6 @@ export async function POST(request: Request) {
         const match = detail.match(/\(([^)]+@[^)]+)\)/);
         if (match && match[1]) {
           const fallbackEmail = match[1];
-          console.warn(
-            `[contact] Retrying delivery to authorized Resend account email: ${fallbackEmail}`
-          );
           const retryResponse = await fetch(RESEND_ENDPOINT, {
             method: "POST",
             headers: {
@@ -205,19 +184,16 @@ export async function POST(request: Request) {
             }),
           });
           if (retryResponse.ok) {
-            return json(
-              { success: true, message: "Message sent successfully." },
-              200
-            );
+            return json({ success: true, message: "Message sent successfully." }, 200);
           }
         }
       }
 
-      return fail("Your message could not be sent. Please try again.", 502);
+      return fail("Your message could not be sent. Please try again later.", 502);
     }
   } catch (error) {
     console.error("[contact] Resend request failed:", error);
-    return fail("Your message could not be sent. Please try again.", 502);
+    return fail("Your message could not be sent. Please try again later.", 502);
   }
 
   return json({ success: true, message: "Message sent successfully." }, 200);

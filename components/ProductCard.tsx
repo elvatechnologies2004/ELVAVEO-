@@ -49,7 +49,9 @@ export default function ProductCard({ product }: ProductCardProps) {
             </p>
 
             <Link
-              href={product.href}
+              href={product.href || "#"}
+              target={product.href?.startsWith("http") ? "_blank" : undefined}
+              rel={product.href?.startsWith("http") ? "noreferrer" : undefined}
               className="group/link mt-[14px] inline-flex w-fit items-center gap-2 text-[14px] font-bold text-blue transition-colors hover:text-violet focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue sm:text-[15px]"
               aria-label={`${product.name} — ${product.cta}`}
             >

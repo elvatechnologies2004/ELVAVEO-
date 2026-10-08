@@ -77,7 +77,7 @@
   {
     "id": "camvia",
     "name": "CAMVIA",
-    "logo": "/brand/camvia-logo.svg",
+    "logo": "/uploads/ChatGPT_Image_Oct_5__2026__03_59_54_PM-1-1791396907873.png",
     "badge": "An ELVAVEO Product",
     "category": "EdTech & AI",
     "headline": [
@@ -91,7 +91,7 @@
       {
         "label": "Operational Efficiency",
         "value": "+45%",
-        "trend": "Automated"
+        "trend": "Active"
       },
       {
         "label": "AI Insights",
@@ -99,14 +99,14 @@
         "trend": "Predictive"
       },
       {
-        "label": "Campus Operations",
-        "value": "All-in-One",
-        "trend": "Smart LMS"
+        "label": "Architecture",
+        "value": "Cloud SaaS",
+        "trend": "Fast"
       },
       {
-        "label": "Learner Success",
-        "value": "99.4%",
-        "trend": "+18%"
+        "label": "Status",
+        "value": "Production",
+        "trend": "99.9%"
       }
     ],
     "accent": "cyan",

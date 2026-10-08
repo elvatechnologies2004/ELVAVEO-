@@ -5,7 +5,7 @@ import type { ProductStat } from "@/data/products";
  * FinloCRM desktop-window mockup — demo dashboard.
  * All values are placeholder demo data from data/products.ts.
  */
-export default function FinloNexaMockup({ stats }: { stats: ProductStat[] }) {
+export default function FinloNexaMockup({ stats }: { stats?: ProductStat[] }) {
   const pipeline = [
     { label: "Lead", width: "34%", tone: "from-cyan to-sky-400" },
     { label: "Qualified", width: "26%", tone: "from-blue to-indigo-400" },
@@ -54,9 +54,9 @@ export default function FinloNexaMockup({ stats }: { stats: ProductStat[] }) {
 
           {/* stat tiles */}
           <div className="grid grid-cols-2 gap-1.5">
-            {stats.map((s) => (
+            {(stats || []).map((s, idx) => (
               <div
-                key={s.label}
+                key={s.label || idx}
                 className="rounded-xl border border-line bg-white p-2 shadow-[0_6px_18px_-14px_rgba(8,27,61,0.3)]"
               >
                 <p className="text-[8.5px] font-semibold uppercase tracking-wide text-muted">

@@ -10,7 +10,7 @@ import {
 import type { Product } from "@/data/products";
 
 export default function DynamicProductMockup({ product }: { product: Product }) {
-  const displayUrl = product.href.replace(/^https?:\/\//, "");
+  const displayUrl = (product.href || "elvaveo.com").replace(/^https?:\/\//, "");
 
   return (
     <div className="mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-line bg-white shadow-card-lg transition-transform hover:-translate-y-0.5">
@@ -47,9 +47,9 @@ export default function DynamicProductMockup({ product }: { product: Product }) 
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-[11px] font-extrabold text-navy">
-                {product.name} Cloud Platform
+                {product.name || "Product"} Cloud Platform
               </p>
-              <p className="text-[9px] text-muted">{product.category} • Live Enterprise Suite</p>
+              <p className="text-[9px] text-muted">{product.category || "AI & Software"} • Live Enterprise Suite</p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-blue/10 px-2 py-0.5 text-[8.5px] font-bold text-blue">
               <ShieldCheck size={9} />
@@ -59,9 +59,9 @@ export default function DynamicProductMockup({ product }: { product: Product }) 
 
           {/* Stat Tiles */}
           <div className="grid grid-cols-2 gap-1.5">
-            {product.stats.map((s, idx) => (
+            {(product.stats || []).map((s, idx) => (
               <div
-                key={idx}
+                key={s.label || idx}
                 className="rounded-xl border border-line bg-white p-2 shadow-[0_6px_18px_-14px_rgba(8,27,61,0.3)]"
               >
                 <p className="text-[8.5px] font-semibold uppercase tracking-wide text-muted truncate">
@@ -91,7 +91,7 @@ export default function DynamicProductMockup({ product }: { product: Product }) 
               <span className="text-[8px] font-bold text-emerald-600">99.9% Uptime</span>
             </div>
             <p className="mt-1 text-[8.5px] leading-relaxed text-muted line-clamp-2">
-              {product.description}
+              {product.description || "Proprietary ELVAVEO platform solution engineered for scalability."}
             </p>
           </div>
 
@@ -102,7 +102,7 @@ export default function DynamicProductMockup({ product }: { product: Product }) 
               <span>{displayUrl}</span>
             </span>
             <a
-              href={product.href}
+              href={product.href || "#"}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[8.5px] font-bold text-blue hover:text-violet"

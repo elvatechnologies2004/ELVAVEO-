@@ -35,12 +35,14 @@ export default function AdminProducts() {
 
   const [draftProduct, setDraftProduct] = useState({
     name: "",
-    category: "EdTech & AI",
+    category: "AI & Software",
     headlineLine1: "",
-    headlineLine2: "",
+    headlineLine2: "Next-Generation Intelligence",
     description: "",
     url: "",
-    logo: "/brand/camvia-logo.svg",
+    logo: "/brand/elvaveo-logo.3d7b3289.png",
+    cta: "Learn More",
+    accent: "cyan" as "cyan" | "violet",
     stats1Label: "Operational Efficiency",
     stats1Value: "+45%",
     stats2Label: "AI Insights",
@@ -80,12 +82,14 @@ export default function AdminProducts() {
     setEditingId(null);
     setDraftProduct({
       name: "",
-      category: "EdTech & AI",
+      category: "AI & Software",
       headlineLine1: "",
-      headlineLine2: "",
+      headlineLine2: "Next-Generation Intelligence",
       description: "",
       url: "",
-      logo: "/brand/camvia-logo.svg",
+      logo: "/brand/elvaveo-logo.3d7b3289.png",
+      cta: "Learn More",
+      accent: "cyan",
       stats1Label: "Operational Efficiency",
       stats1Value: "+45%",
       stats2Label: "AI Insights",
@@ -98,12 +102,14 @@ export default function AdminProducts() {
     setEditingId(prod.id);
     setDraftProduct({
       name: prod.name,
-      category: prod.category,
+      category: prod.category || "AI & Software",
       headlineLine1: prod.headline?.[0] || prod.name,
       headlineLine2: prod.headline?.[1] || "",
-      description: prod.description,
-      url: prod.href,
+      description: prod.description || "",
+      url: prod.href || "",
       logo: prod.logo || "/brand/elvaveo-logo.3d7b3289.png",
+      cta: prod.cta || "Learn More",
+      accent: (prod.accent === "violet" ? "violet" : "cyan") as "cyan" | "violet",
       stats1Label: prod.stats?.[0]?.label || "Metric 1",
       stats1Value: prod.stats?.[0]?.value || "100%",
       stats2Label: prod.stats?.[1]?.label || "Metric 2",
@@ -160,26 +166,43 @@ export default function AdminProducts() {
     // Auto-normalize URL
     let finalUrl = draftProduct.url.trim();
     if (!finalUrl) {
-      finalUrl = `https://${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "")}.elvaveo.com`;
+      const cleanSlug = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "");
+      finalUrl = `https://${cleanSlug || "product"}.elvaveo.com`;
     } else if (!/^https?:\/\//i.test(finalUrl)) {
       finalUrl = `https://${finalUrl}`;
     }
 
-    const targetId = editingId || trimmedName.toLowerCase().replace(/[^a-z0-9]/g, "-") || `custom-${Date.now()}`;
+    // Determine target ID
+    let targetId = editingId;
+    if (!targetId) {
+      const baseSlug =
+        trimmedName
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "") || "product";
+
+      targetId = baseSlug;
+      let counter = 1;
+      while (productList.some((p) => p.id === targetId)) {
+        targetId = `${baseSlug}-${counter}`;
+        counter++;
+      }
+    }
 
     const prodPayload: Product = {
       id: targetId,
       name: trimmedName,
       logo: draftProduct.logo || "/brand/elvaveo-logo.3d7b3289.png",
       badge: "An ELVAVEO Product",
-      category: draftProduct.category.trim() || "AI & Automation",
+      category: draftProduct.category.trim() || "AI & Software",
       headline: [
         draftProduct.headlineLine1.trim() || trimmedName,
         draftProduct.headlineLine2.trim() || "Next-Generation Intelligence",
       ],
       accentLine: 1,
       description: trimmedDesc,
-      cta: "Learn More",
+      cta: draftProduct.cta.trim() || "Learn More",
       stats: [
         {
           label: draftProduct.stats1Label.trim() || "Efficiency",
@@ -194,15 +217,19 @@ export default function AdminProducts() {
         { label: "Architecture", value: "Cloud SaaS", trend: "Fast" },
         { label: "Status", value: "Production", trend: "99.9%" },
       ],
-      accent: "cyan",
+      accent: draftProduct.accent || "cyan",
       href: finalUrl,
     };
 
-    // Replace if existing or append
-    const existingIndex = productList.findIndex((p) => p.id === targetId);
-    const updated = existingIndex >= 0
-      ? productList.map((p, idx) => (idx === existingIndex ? prodPayload : p))
-      : [...productList, prodPayload];
+    // If editing, replace existing; if adding, append newly created product
+    const existingIndex = editingId
+      ? productList.findIndex((p) => p.id === editingId)
+      : -1;
+
+    const updated =
+      existingIndex >= 0
+        ? productList.map((p, idx) => (idx === existingIndex ? prodPayload : p))
+        : [...productList, prodPayload];
 
     setIsSaving(true);
     try {
@@ -239,18 +266,16 @@ export default function AdminProducts() {
       return;
     }
 
-    const updated = productList.filter((p) => p.id !== id);
     setIsSaving(true);
     try {
-      const res = await fetch("/api/admin/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updated),
+      const res = await fetch(`/api/admin/products?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setProductList(data.products || updated);
+        const remaining = productList.filter((p) => p.id !== id);
+        setProductList(data.products || remaining);
         showToast(`Removed "${name}" from live products.`, "success");
       } else {
         showToast(data.error || "Failed to delete product.", "error");
@@ -265,10 +290,10 @@ export default function AdminProducts() {
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
+      {/* Toast Notification with top-most z-index */}
       {toastMessage && (
         <div
-          className={`fixed top-24 right-8 z-50 flex items-center gap-2.5 rounded-2xl border px-5 py-3 text-sm font-bold shadow-xl backdrop-blur-xl animate-in fade-in slide-in-from-top-4 ${
+          className={`fixed top-24 right-8 z-[100] flex items-center gap-2.5 rounded-2xl border px-5 py-3 text-sm font-bold shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-4 ${
             toastMessage.type === "success"
               ? "border-emerald-500/30 bg-emerald-500/90 text-white"
               : "border-rose-500/30 bg-rose-500/95 text-white"
@@ -393,7 +418,7 @@ export default function AdminProducts() {
 
               {/* Headline & Description */}
               <p className="mt-4 text-[14px] font-semibold text-navy/80">
-                {prod.headline.join(" ")}
+                {prod.headline ? prod.headline.join(" ") : prod.name}
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-muted line-clamp-3">
                 {prod.description}
@@ -405,7 +430,7 @@ export default function AdminProducts() {
                   Product Metrics &amp; Performance
                 </p>
                 <div className="mt-2.5 grid grid-cols-2 gap-2">
-                  {prod.stats.slice(0, 4).map((stat, idx) => (
+                  {(prod.stats || []).slice(0, 4).map((stat, idx) => (
                     <div key={idx} className="rounded-xl bg-white/80 p-2 shadow-xs">
                       <p className="text-[9.5px] font-medium text-muted truncate">
                         {stat.label}
@@ -435,8 +460,8 @@ export default function AdminProducts() {
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-[28px] border border-white/80 bg-white p-6 shadow-2xl sm:p-8 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-xl rounded-[28px] border border-white/80 bg-white p-6 shadow-2xl sm:p-8 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setIsModalOpen(false)}
               className="absolute right-5 top-5 rounded-full p-2 text-muted hover:bg-black/5"
@@ -444,7 +469,13 @@ export default function AdminProducts() {
               <X size={18} />
             </button>
 
-            <h3 className="text-[18px] font-bold text-navy">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue/10 px-2.5 py-0.5 text-[11px] font-bold text-blue">
+                {editingId ? "Update Live" : "New Creation"}
+              </span>
+            </div>
+
+            <h3 className="mt-1 text-[20px] font-extrabold text-navy">
               {editingId ? `Edit ${draftProduct.name}` : "Add New Product"}
             </h3>
             <p className="mt-1 text-[13px] text-muted">
@@ -453,19 +484,66 @@ export default function AdminProducts() {
                 : "Publish a new proprietary digital product to ELVAVEO. It will be immediately live across all public pages."}
             </p>
 
-            <form onSubmit={handleSaveProduct} className="mt-5 space-y-4">
-              <div>
-                <label className="text-xs font-bold text-navy">Product Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. CAMVIA, FinloAI"
-                  value={draftProduct.name}
-                  onChange={(e) =>
-                    setDraftProduct({ ...draftProduct, name: e.target.value })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
-                />
+            <form onSubmit={handleSaveProduct} className="mt-6 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-navy">Product Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. CAMVIA, Finlo, AutoFlow"
+                    value={draftProduct.name}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, name: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-navy">Category *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. EdTech & AI, FinTech, SaaS"
+                    value={draftProduct.category}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, category: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Headlines Customization */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-navy">Headline (Line 1)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Intelligent School Management"
+                    value={draftProduct.headlineLine1}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, headlineLine1: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-navy">
+                    Headline (Line 2 Gradient)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. AI-Powered Educational Insights"
+                    value={draftProduct.headlineLine2}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, headlineLine2: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
               </div>
 
               {/* Logo Upload & Selection Section */}
@@ -545,33 +623,65 @@ export default function AdminProducts() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-navy">Category</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. EdTech & AI, FinTech, Productivity"
-                  value={draftProduct.category}
-                  onChange={(e) =>
-                    setDraftProduct({ ...draftProduct, category: e.target.value })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
-                />
+              {/* Website URL & CTA */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-navy">Website / Subdomain</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. camvia.elvaveo.com or https://..."
+                    value={draftProduct.url}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, url: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-navy">CTA Button Text</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Learn More, Launch App"
+                    value={draftProduct.cta}
+                    onChange={(e) =>
+                      setDraftProduct({ ...draftProduct, cta: e.target.value })
+                    }
+                    className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
+                  />
+                </div>
               </div>
 
+              {/* Accent style */}
               <div>
-                <label className="text-xs font-bold text-navy">Product Website / Subdomain</label>
-                <input
-                  type="text"
-                  placeholder="e.g. camvia.elvaveo.com or https://..."
-                  value={draftProduct.url}
-                  onChange={(e) =>
-                    setDraftProduct({ ...draftProduct, url: e.target.value })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-blue/20 bg-ice px-3.5 py-2.5 text-xs font-medium text-navy focus:border-blue focus:bg-white focus:outline-none"
-                />
+                <label className="text-xs font-bold text-navy">Accent Style Glow</label>
+                <div className="mt-1.5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDraftProduct({ ...draftProduct, accent: "cyan" })}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                      draftProduct.accent === "cyan"
+                        ? "border-cyan bg-cyan/15 text-cyan-700 shadow-xs"
+                        : "border-blue/15 bg-ice text-muted hover:text-navy"
+                    }`}
+                  >
+                    Cyan Aura (Tech &amp; AI)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraftProduct({ ...draftProduct, accent: "violet" })}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                      draftProduct.accent === "violet"
+                        ? "border-violet bg-violet/15 text-violet-700 shadow-xs"
+                        : "border-blue/15 bg-ice text-muted hover:text-navy"
+                    }`}
+                  >
+                    Violet Aura (CRM &amp; Growth)
+                  </button>
+                </div>
               </div>
 
+              {/* Description */}
               <div>
                 <label className="text-xs font-bold text-navy">Description *</label>
                 <textarea
@@ -586,12 +696,13 @@ export default function AdminProducts() {
                 />
               </div>
 
+              {/* Metrics */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-bold text-navy">Metric 1</label>
                   <input
                     type="text"
-                    placeholder="e.g. Operational Efficiency"
+                    placeholder="Label (e.g. Operational Efficiency)"
                     value={draftProduct.stats1Label}
                     onChange={(e) =>
                       setDraftProduct({ ...draftProduct, stats1Label: e.target.value })
@@ -612,7 +723,7 @@ export default function AdminProducts() {
                   <label className="text-[11px] font-bold text-navy">Metric 2</label>
                   <input
                     type="text"
-                    placeholder="e.g. AI Insights"
+                    placeholder="Label (e.g. AI Insights)"
                     value={draftProduct.stats2Label}
                     onChange={(e) =>
                       setDraftProduct({ ...draftProduct, stats2Label: e.target.value })

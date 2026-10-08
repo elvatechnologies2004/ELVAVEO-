@@ -60,7 +60,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
 ] as const;
 
 export interface ProductLink {
-  id: "finlo" | "finlonexa";
+  id: string;
   name: string;
   /** Live product site, hosted on an ELVAVEO subdomain. */
   href: string;
@@ -73,5 +73,10 @@ export const PRODUCT_LINKS: readonly ProductLink[] = [
     id: "finlonexa",
     name: "FinloCRM",
     href: "https://crm.elvaveo.com",
+  },
+  {
+    id: "camvia",
+    name: "CAMVIA",
+    href: "https://camvia.elvaveo.com",
   },
 ] as const;

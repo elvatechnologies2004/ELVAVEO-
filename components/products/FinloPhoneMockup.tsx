@@ -8,8 +8,8 @@ import type { ProductStat } from "@/data/products";
  * card stays short. The recent-transactions list was removed for the same
  * reason. All values are placeholder demo data.
  */
-export default function FinloPhoneMockup({ stats }: { stats: ProductStat[] }) {
-  const balance = stats[0]?.value ?? "Rs. 24,860.50";
+export default function FinloPhoneMockup({ stats }: { stats?: ProductStat[] }) {
+  const balance = stats?.[0]?.value ?? "Rs. 24,860.50";
   // Fixed pixel heights (px) so bars render reliably inside flexible chart area.
   const bars = [18, 25, 16, 28, 22, 33, 27];
 
@@ -64,9 +64,9 @@ export default function FinloPhoneMockup({ stats }: { stats: ProductStat[] }) {
 
         {/* stat tiles */}
         <div className="grid grid-cols-3 gap-1.5 @[22rem]:col-span-2 @[34rem]:col-span-1">
-          {stats.slice(1).map((s) => (
+          {(stats || []).slice(1).map((s, idx) => (
             <div
-              key={s.label}
+              key={s.label || idx}
               className="rounded-xl border border-line bg-white p-1.5"
             >
               <p className="text-[7.5px] font-semibold uppercase tracking-wide text-muted">

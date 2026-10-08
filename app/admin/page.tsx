@@ -9,7 +9,7 @@ import AdminProducts from "@/components/admin/AdminProducts";
 import AdminTeam from "@/components/admin/AdminTeam";
 import AdminProjects from "@/components/admin/AdminProjects";
 import AdminSettings from "@/components/admin/AdminSettings";
-import AdminAuthModal from "@/components/admin/AdminAuthModal";
+import AdminLoginPage from "@/components/admin/AdminLoginPage";
 import type { InquiryItem } from "@/app/api/admin/inquiries/route";
 
 export default function AdminPage() {
@@ -21,39 +21,62 @@ export default function AdminPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Check session storage on mount
+  // Check server-side session status on mount
   useEffect(() => {
-    try {
-      const auth = sessionStorage.getItem("elvaveo_admin_auth");
-      if (auth === "true") {
-        setIsAuthenticated(true);
+    let isMounted = true;
+    async function checkServerSession() {
+      try {
+        const res = await fetch("/api/admin/auth", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setIsAuthenticated(!!data.authenticated);
+          }
+        } else {
+          if (isMounted) setIsAuthenticated(false);
+        }
+      } catch {
+        if (isMounted) setIsAuthenticated(false);
+      } finally {
+        if (isMounted) setIsAuthChecked(true);
       }
-    } catch {
-      // sessionStorage might fail in restricted environments
-    } finally {
-      setIsAuthChecked(true);
     }
+
+    checkServerSession();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleUnlock = () => {
     setIsAuthenticated(true);
-    try {
-      sessionStorage.setItem("elvaveo_admin_auth", "true");
-    } catch {}
   };
 
-  const handleLock = () => {
+  const handleLock = async () => {
     setIsAuthenticated(false);
     try {
+      await fetch("/api/admin/auth", {
+        method: "DELETE",
+        cache: "no-store",
+      });
       sessionStorage.removeItem("elvaveo_admin_auth");
-    } catch {}
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
   };
 
-  // Fetch inquiries from API
+  // Fetch inquiries from API with automatic session expiration detection
   const fetchInquiries = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch("/api/admin/inquiries");
+      const res = await fetch("/api/admin/inquiries", { cache: "no-store" });
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.inquiries) {
@@ -84,6 +107,10 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status }),
       });
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (res.ok) {
         setInquiries((prev) =>
           prev.map((item) => (item.id === id ? { ...item, status } : item))
@@ -99,6 +126,10 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/inquiries?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (res.ok) {
         setInquiries((prev) => prev.filter((item) => item.id !== id));
       }
@@ -119,6 +150,10 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(item),
       });
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         if (data.inquiry) {
@@ -141,7 +176,7 @@ export default function AdminPage() {
   }
 
   if (!isAuthenticated) {
-    return <AdminAuthModal onUnlock={handleUnlock} />;
+    return <AdminLoginPage onUnlock={handleUnlock} />;
   }
 
   return (

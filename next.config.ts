@@ -1,12 +1,7 @@
 import type { NextConfig } from "next";
 
 /**
- * Production security headers.
- *
- * Deliberately conservative: no Content-Security-Policy, because the site uses
- * next/image optimization, Google Fonts self-hosting, and inline style
- * attributes that a hand-written CSP would break. Add a CSP only after
- * verifying it against a report-only rollout.
+ * Hardened production security headers.
  */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -14,20 +9,50 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+    value: "camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=()",
   },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
   },
+  {
+    key: "X-DNS-Prefetch-Control",
+    value: "on",
+  },
+  {
+    key: "Cross-Origin-Opener-Policy",
+    value: "same-origin-allow-popups",
+  },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https:",
+      "connect-src 'self' https://api.resend.com https://va.vercel-scripts.com",
+      "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; "),
+  },
+];
+
+/**
+ * Isolated sandboxing headers for user-uploaded assets to prevent XSS execution
+ */
+const uploadSandboxedHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Content-Security-Policy", value: "default-src 'none'; sandbox; style-src 'unsafe-inline';" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
 ];
 
 const nextConfig: NextConfig = {
-  // Don't advertise the framework version.
   poweredByHeader: false,
   reactStrictMode: true,
   images: {
-    // Self-hosted, trusted brand SVGs only (Finlo / FinloCRM placeholders).
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
@@ -36,6 +61,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        source: "/uploads/:path*",
+        headers: uploadSandboxedHeaders,
+      },
       {
         source: "/:path*",
         headers: securityHeaders,
