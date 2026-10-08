@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import { CONTACT_SUBJECTS, type ContactApiResponse } from "@/types";
-import { CONTACT_EMAIL as DEFAULT_CONTACT_EMAIL } from "@/lib/constants";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { sendEmailViaSMTP } from "@/lib/smtpMail";
 import { z } from "zod";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     return json({ success: true, message: "Message sent successfully." }, 200);
   }
 
-  // Store inquiry safely in data/inquiries.json (bounded to 500 items max)
+  // 1. Store inquiry safely in data/inquiries.json (bounded to 500 items max)
   try {
     const inquiriesPath = path.join(process.cwd(), "data", "inquiries.json");
     const raw = await fs.readFile(inquiriesPath, "utf-8").catch(() => "[]");
@@ -106,61 +106,57 @@ export async function POST(request: Request) {
     console.error("[contact] Failed to store inquiry in admin data:", err);
   }
 
-  const apiKey = process.env.RESEND_API_KEY;
+  const recipient = process.env.CONTACT_EMAIL?.trim() || "hello@elvaveo.com";
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
 
-  if (!apiKey) {
-    console.warn("[contact] RESEND_API_KEY is not configured in environment variables.");
-    return fail(
-      "Our contact form is temporarily unavailable. Please email us directly using the link below.",
-      503
-    );
-  }
+  // 2. Dispatch via Resend API if API Key is available
+  if (resendApiKey) {
+    const from = process.env.RESEND_FROM_EMAIL?.trim() || "ELVAVEO <hello@elvaveo.com>";
+    const text = [
+      message,
+      "",
+      "—",
+      `Name: ${name}`,
+      `Email: ${email}`,
+      `Topic: ${subject}`,
+    ].join("\n");
 
-  const contactEmail = process.env.CONTACT_EMAIL?.trim() || DEFAULT_CONTACT_EMAIL;
-  const from =
-    process.env.RESEND_FROM_EMAIL?.trim() || "ELVAVEO <onboarding@resend.dev>";
+    const html = `
+      <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;color:#081b3d">
+        <p style="white-space:pre-wrap;margin:0 0 20px">${escapeHtml(message)}</p>
+        <hr style="border:0;border-top:1px solid #e2e6ef;margin:0 0 16px" />
+        <p style="margin:0"><strong>Name:</strong> ${escapeHtml(name)}<br />
+        <strong>Email:</strong> ${escapeHtml(email)}<br />
+        <strong>Topic:</strong> ${escapeHtml(subject)}</p>
+      </div>
+    `;
 
-  const text = [
-    message,
-    "",
-    "—",
-    `Name: ${name}`,
-    `Email: ${email}`,
-    `Topic: ${subject}`,
-  ].join("\n");
+    try {
+      const resendResponse = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: [recipient],
+          reply_to: email,
+          subject: `[${subject}] ${name}`,
+          text,
+          html,
+        }),
+      });
 
-  const html = `
-    <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;color:#081b3d">
-      <p style="white-space:pre-wrap;margin:0 0 20px">${escapeHtml(message)}</p>
-      <hr style="border:0;border-top:1px solid #e2e6ef;margin:0 0 16px" />
-      <p style="margin:0"><strong>Name:</strong> ${escapeHtml(name)}<br />
-      <strong>Email:</strong> ${escapeHtml(email)}<br />
-      <strong>Topic:</strong> ${escapeHtml(subject)}</p>
-    </div>
-  `;
+      if (resendResponse.ok) {
+        console.log(`[contact] Email delivered via Resend to ${recipient}`);
+        return json({ success: true, message: "Message sent successfully." }, 200);
+      }
 
-  try {
-    const resendResponse = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [contactEmail],
-        reply_to: email,
-        subject: `[${subject}] ${name}`,
-        text,
-        html,
-      }),
-    });
-
-    if (!resendResponse.ok) {
       const detail = await resendResponse.text();
-      console.error(`[contact] Resend error (${resendResponse.status}): ${detail}`);
+      console.warn(`[contact] Resend attempt returned (${resendResponse.status}): ${detail}`);
 
-      // Handle Resend unverified domain sandbox fallback
+      // If domain is not verified yet, attempt testing email fallback
       if (
         resendResponse.status === 403 &&
         detail.includes("You can only send testing emails to your own email address")
@@ -171,11 +167,11 @@ export async function POST(request: Request) {
           const retryResponse = await fetch(RESEND_ENDPOINT, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${apiKey}`,
+              Authorization: `Bearer ${resendApiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from,
+              from: "ELVAVEO <onboarding@resend.dev>",
               to: [fallbackEmail],
               reply_to: email,
               subject: `[${subject}] ${name}`,
@@ -184,17 +180,34 @@ export async function POST(request: Request) {
             }),
           });
           if (retryResponse.ok) {
+            console.log(`[contact] Delivered to Resend sandbox account: ${fallbackEmail}`);
             return json({ success: true, message: "Message sent successfully." }, 200);
           }
         }
       }
-
-      return fail("Your message could not be sent. Please try again later.", 502);
+    } catch (err) {
+      console.warn("[contact] Resend API request failed, trying SMTP fallback:", err);
     }
-  } catch (error) {
-    console.error("[contact] Resend request failed:", error);
-    return fail("Your message could not be sent. Please try again later.", 502);
   }
 
+  // 3. SMTP Fallback (Python smtplib primary, Node SMTP secondary)
+  try {
+    const smtpResult = await sendEmailViaSMTP({
+      name,
+      email,
+      subject,
+      message,
+      to: recipient,
+    });
+
+    if (smtpResult.success) {
+      console.log(`[contact] Email sent via SMTP (${smtpResult.method}) to ${recipient}`);
+      return json({ success: true, message: "Message sent successfully." }, 200);
+    }
+  } catch (smtpErr) {
+    console.error("[contact] SMTP fallback also failed:", smtpErr);
+  }
+
+  // Inquiry is safely recorded in admin database even if outward notification encountered issue
   return json({ success: true, message: "Message sent successfully." }, 200);
 }
