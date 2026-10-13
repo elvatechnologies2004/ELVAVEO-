@@ -40,17 +40,30 @@ export function validateRequestOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host") || request.headers.get("x-forwarded-host");
 
+  const parseHost = (raw: string | null): string => {
+    if (!raw) return "";
+    try {
+      const url = raw.includes("://") ? new URL(raw) : new URL(`http://${raw}`);
+      return url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    } catch {
+      return raw.split(":")[0].replace(/^\[|\]$/g, "").toLowerCase();
+    }
+  };
+
+  const isLocal = (h: string) =>
+    h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "";
+
   if (!origin) {
     const referer = request.headers.get("referer");
     if (!referer) return true; // Non-browser API caller or direct curl
     try {
-      const refUrl = new URL(referer);
-      if (host) {
-        const cleanHost = host.split(":")[0];
-        const cleanRefHost = refUrl.hostname;
-        if (cleanHost !== cleanRefHost && cleanRefHost !== "localhost" && cleanRefHost !== "127.0.0.1") {
-          return false;
+      const refHost = parseHost(referer);
+      const serverHost = parseHost(host);
+      if (serverHost && refHost) {
+        if (serverHost === refHost || (isLocal(serverHost) && isLocal(refHost))) {
+          return true;
         }
+        return false;
       }
       return true;
     } catch {
@@ -59,19 +72,12 @@ export function validateRequestOrigin(request: Request): boolean {
   }
 
   try {
-    const originUrl = new URL(origin);
-    if (host) {
-      const cleanHost = host.split(":")[0];
-      const cleanOriginHost = originUrl.hostname;
+    const originHost = parseHost(origin);
+    const serverHost = parseHost(host);
 
-      // Allow same host or local development loops
-      if (cleanHost === cleanOriginHost) return true;
-      if (
-        (cleanOriginHost === "localhost" || cleanOriginHost === "127.0.0.1") &&
-        (cleanHost === "localhost" || cleanHost === "127.0.0.1")
-      ) {
-        return true;
-      }
+    if (serverHost && originHost) {
+      if (serverHost === originHost) return true;
+      if (isLocal(serverHost) && isLocal(originHost)) return true;
       return false;
     }
     return true;
@@ -164,7 +170,11 @@ export async function requireAdminAuth(request: Request): Promise<
     const cookies = Object.fromEntries(
       cookieHeader.split("; ").map((c) => {
         const [k, ...v] = c.split("=");
-        return [k, decodeURIComponent(v.join("="))];
+        try {
+          return [k, decodeURIComponent(v.join("="))];
+        } catch {
+          return [k, v.join("=")];
+        }
       })
     );
     token = cookies[ADMIN_COOKIE_NAME];

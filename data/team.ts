@@ -9,39 +9,42 @@ export interface TeamMember {
 
 /**
  * Team members list for the "Meet Our Team" section on the About page.
- * You can add, remove, or edit members here anytime.
+ * Kept in sync with admin console and data/team.json.
  */
 export const teamMembers: TeamMember[] = [
   {
-    name: "Syed Hussain Ali",
-    role: "Founder & Lead",
-    initials: "SHA",
-    description:
-      "Building digital products and software solutions with a focus on practical innovation and long-term value.",
-    linkedin: "https://www.linkedin.com/",
+    "name": "Syed Hussain Ali",
+    "role": "Founder & CEO",
+    "initials": "SHA",
+    "description": "Building digital products and software solutions with a focus on practical innovation and long-term value.",
+    "linkedin": "https://www.linkedin.com/"
   },
   {
-    name: "Team Member 1",
-    role: "Lead Full-Stack Engineer",
-    initials: "FE",
-    description:
-      "Specializing in modern web technologies, performant architectures, and scalable cloud solutions.",
-    linkedin: "https://www.linkedin.com/",
+    "name": "Abdullah Rashid",
+    "role": "Lead Full-Stack Engineer",
+    "initials": "AR",
+    "description": "Specializing in modern web technologies, performant architectures, and scalable cloud solutions.",
+    "linkedin": "https://www.linkedin.com/"
   },
   {
-    name: "Team Member 2",
-    role: "UI/UX & Product Designer",
-    initials: "PD",
-    description:
-      "Designing clean, human-centered interfaces and intuitive design systems for web and mobile products.",
-    linkedin: "https://www.linkedin.com/",
+    "name": "Khatiba ",
+    "role": "Graphic Designer",
+    "initials": "PD",
+    "description": "Designing clean, human-centered interfaces and intuitive design systems for web and mobile products.",
+    "linkedin": "https://www.linkedin.com/"
   },
   {
-    name: "Team Member 3",
-    role: "Mobile App Developer",
-    initials: "MD",
-    description:
-      "Crafting seamless cross-platform mobile experiences with smooth animations and high reliability.",
-    linkedin: "https://www.linkedin.com/",
+    "name": "Izhar Ali Jafar",
+    "role": "Mobile App Developer",
+    "initials": "IAJ",
+    "description": "Crafting seamless cross-platform mobile experiences with smooth animations and high reliability.",
+    "linkedin": "https://www.linkedin.com/"
   },
+  {
+    "name": "Mudassir Khan",
+    "role": "Social Media Marketing",
+    "initials": "MK",
+    "description": "Hi i am Mudassir Khan ",
+    "linkedin": "https://www.linkedin.com/in/mudassir-khan-paracha"
+  }
 ];

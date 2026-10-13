@@ -4,6 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { requireAdminAuth } from "@/lib/security";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
 
@@ -200,26 +201,62 @@ export async function POST(request: Request) {
       }
     }
 
-    // 8. Safe Cryptographic File Naming (Prevents Path Traversal & Overwrite)
-    await fs.mkdir(UPLOADS_DIR, { recursive: true });
-
+    // 8. Safe Cryptographic File Naming
     const safeExt = allowedExts[0];
     const randomHex = crypto.randomBytes(8).toString("hex");
     const safeFileName = `asset_${Date.now()}_${randomHex}${safeExt}`;
-    const targetFilePath = path.join(UPLOADS_DIR, safeFileName);
 
-    await fs.writeFile(targetFilePath, buffer);
+    // A. Try Supabase Storage if configured
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from("uploads")
+          .upload(safeFileName, buffer, { contentType: mime, upsert: true });
 
-    const publicUrl = `/uploads/${safeFileName}`;
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from("uploads").getPublicUrl(safeFileName);
+          if (urlData?.publicUrl) {
+            return NextResponse.json(
+              {
+                success: true,
+                url: urlData.publicUrl,
+                fileName: safeFileName,
+              },
+              { status: 201 }
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("[upload] Supabase storage upload warning:", err);
+      }
+    }
 
-    return NextResponse.json(
-      {
-        success: true,
-        url: publicUrl,
-        fileName: safeFileName,
-      },
-      { status: 201 }
-    );
+    // B. Local File Write
+    try {
+      await fs.mkdir(UPLOADS_DIR, { recursive: true });
+      const targetFilePath = path.join(UPLOADS_DIR, safeFileName);
+      await fs.writeFile(targetFilePath, buffer);
+
+      const publicUrl = `/uploads/${safeFileName}`;
+      return NextResponse.json(
+        {
+          success: true,
+          url: publicUrl,
+          fileName: safeFileName,
+        },
+        { status: 201 }
+      );
+    } catch (fsErr) {
+      console.warn("[upload] Local filesystem write failed (serverless environment):", fsErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cloud filesystem is read-only. Please paste an image URL directly into the profile image field, or configure Supabase Storage.",
+        },
+        { status: 400 }
+      );
+    }
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(

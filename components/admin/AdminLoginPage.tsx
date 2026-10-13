@@ -91,6 +91,10 @@ export default function AdminLoginPage({ onUnlock }: AdminLoginPageProps) {
       // Login Successful! Unlock console immediately
       try {
         sessionStorage.setItem("elvaveo_admin_auth", "true");
+        if (data.token) {
+          sessionStorage.setItem("elvaveo_admin_token", data.token);
+          localStorage.setItem("elvaveo_admin_token", data.token);
+        }
       } catch {}
 
       onUnlock();
