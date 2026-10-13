@@ -17,6 +17,10 @@ import {
   RefreshCw,
   Upload,
   Link as LinkIcon,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  Move,
 } from "lucide-react";
 import Link from "next/link";
 import { teamMembers as fallbackMembers, type TeamMember } from "@/data/team";
@@ -49,6 +53,10 @@ export default function AdminTeam() {
   const [isAdding, setIsAdding] = useState(false);
   const [copied, setCopied] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Drag and drop state for card reordering
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -140,6 +148,69 @@ export default function AdminTeam() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Drag and Drop reordering handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, index: number) => {
+    if (dragOverIdx === index) {
+      setDragOverIdx(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    setDragOverIdx(null);
+
+    if (draggedIdx === null || draggedIdx === targetIndex) {
+      setDraggedIdx(null);
+      return;
+    }
+
+    const updated = [...members];
+    const [draggedMember] = updated.splice(draggedIdx, 1);
+    updated.splice(targetIndex, 0, draggedMember);
+
+    setMembers(updated);
+    setDraggedIdx(null);
+
+    await persistTeam(
+      updated,
+      `Reordered sequence! Moved ${draggedMember.name} to position #${targetIndex + 1}. Saved live.`
+    );
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const moveMember = async (currentIndex: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= members.length) return;
+
+    const updated = [...members];
+    const [member] = updated.splice(currentIndex, 1);
+    updated.splice(targetIndex, 0, member);
+
+    setMembers(updated);
+    await persistTeam(
+      updated,
+      `Reordered sequence! Moved ${member.name} to position #${targetIndex + 1}. Saved live.`
+    );
   };
 
   const openAddModal = () => {
@@ -335,10 +406,14 @@ export default function AdminTeam() {
       {/* Top Banner */}
       <div className="glass flex flex-col justify-between gap-4 rounded-[22px] p-6 shadow-card sm:flex-row sm:items-center">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-violet/10 px-3 py-1 text-[11px] font-bold text-violet">
               <Users size={13} />
               Connected Live to Website ({members.length} Active Members)
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue/10 px-3 py-1 text-[11px] font-bold text-blue">
+              <Move size={11} />
+              Drag &amp; drop cards to reorder sequence
             </span>
             <Link
               href="/about#team"
@@ -353,7 +428,7 @@ export default function AdminTeam() {
             Team Members &amp; Leadership Management
           </h2>
           <p className="text-[13px] text-muted">
-            Any addition, edit, or deletion made here <strong>instantly updates</strong> the public About page team slider.
+            Drag cards or use arrow buttons to reorder positions. Any change <strong>instantly updates</strong> the public About page team slider.
           </p>
         </div>
 
@@ -387,28 +462,86 @@ export default function AdminTeam() {
         </div>
       </div>
 
-      {/* Grid of Team Cards */}
+      {/* Grid of Team Cards with Drag and Drop Sequence Support */}
       <div className="grid gap-6 lg:grid-cols-2">
         {members.map((member, idx) => (
-          <div key={idx} className="relative group">
-            {/* Action overlay buttons */}
-            <div className="absolute right-4 top-4 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => openEditModal(member, idx)}
-                title="Edit member"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue/20 bg-white shadow-md text-blue hover:bg-blue hover:text-white transition-colors cursor-pointer"
-              >
-                <Edit2 size={13} />
-              </button>
-              {members.length > 1 && (
-                <button
-                  onClick={() => handleDelete(idx)}
-                  title="Delete member"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white shadow-md text-rose-600 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer"
+          <div
+            key={member.name + idx}
+            draggable={!isSaving}
+            onDragStart={(e) => handleDragStart(e, idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDragLeave={(e) => handleDragLeave(e, idx)}
+            onDrop={(e) => handleDrop(e, idx)}
+            onDragEnd={handleDragEnd}
+            className={`relative group rounded-[28px] transition-all duration-200 ${
+              draggedIdx === idx
+                ? "opacity-35 scale-[0.98] ring-2 ring-dashed ring-blue"
+                : dragOverIdx === idx
+                ? "scale-[1.02] ring-2 ring-blue ring-offset-4 shadow-2xl z-30"
+                : ""
+            }`}
+          >
+            {/* Top Sequence & Drag Reorder Bar */}
+            <div className="mb-2.5 flex items-center justify-between rounded-xl bg-white/70 backdrop-blur-sm border border-blue/15 px-3 py-1.5 shadow-xs">
+              <div className="flex items-center gap-2">
+                {/* Sequence position badge */}
+                <span className="flex items-center gap-1 rounded-full bg-blue/10 px-2 py-0.5 text-[11px] font-extrabold text-blue">
+                  <span>#{idx + 1}</span>
+                  {idx === 0 && <span className="text-[9px] uppercase font-bold text-violet">(First)</span>}
+                </span>
+
+                {/* Drag handle */}
+                <div
+                  className="flex items-center gap-1 cursor-grab active:cursor-grabbing rounded-lg bg-white border border-blue/15 px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-blue hover:border-blue/30 shadow-2xs transition-colors"
+                  title="Drag and drop to reorder member position"
                 >
-                  <Trash2 size={13} />
+                  <GripVertical size={13} className="text-blue shrink-0" />
+                  <span className="text-[11px]">Drag to reorder</span>
+                </div>
+              </div>
+
+              {/* Action buttons: Move Up, Move Down, Edit, Delete */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={idx === 0 || isSaving}
+                  onClick={() => moveMember(idx, "up")}
+                  title="Move member up / left in sequence"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                >
+                  <ArrowUp size={12} />
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  disabled={idx === members.length - 1 || isSaving}
+                  onClick={() => moveMember(idx, "down")}
+                  title="Move member down / right in sequence"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                >
+                  <ArrowDown size={12} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openEditModal(member, idx)}
+                  title="Edit member details"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/20 bg-white text-blue hover:bg-blue hover:text-white transition-colors cursor-pointer ml-1"
+                >
+                  <Edit2 size={12} />
+                </button>
+
+                {members.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(idx)}
+                    title="Delete member"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Live rendered LeadershipCard */}
