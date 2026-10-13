@@ -12,6 +12,10 @@ type LeadershipCardProps =
       initials?: string;
       /** Optional portrait. Omit when no verified photo is available. */
       image?: string;
+      /** Custom frame vertical/horizontal alignment, e.g. 'center 15%' or 'top' */
+      imagePosition?: string;
+      /** Custom zoom/scale ratio for frame adjustment (e.g. 1.0 to 1.5) */
+      imageScale?: number;
       /** Optional verified profile URL. */
       linkedin?: string;
     }
@@ -59,7 +63,7 @@ export default function LeadershipCard(props: LeadershipCardProps) {
     );
   }
 
-  const { name, role, description, initials, image, linkedin } = props;
+  const { name, role, description, initials, image, imagePosition, imageScale, linkedin } = props;
   const displayInitials =
     initials ||
     name
@@ -81,7 +85,12 @@ export default function LeadershipCard(props: LeadershipCardProps) {
             fill
             unoptimized
             sizes="(min-width: 640px) 144px, 96px"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-300"
+            style={{
+              objectPosition: imagePosition || "center 20%",
+              transform: imageScale && imageScale !== 1 ? `scale(${imageScale})` : undefined,
+              transformOrigin: imagePosition || "center",
+            }}
           />
         ) : (
           <>

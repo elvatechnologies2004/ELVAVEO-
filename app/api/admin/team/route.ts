@@ -10,7 +10,9 @@ const TeamMemberSchema = z.object({
   role: z.string().trim().min(1, "Role is required").max(100),
   description: z.string().trim().max(3000).default("").nullable().optional(),
   initials: z.string().trim().max(20).nullable().optional(),
-  image: z.string().trim().max(1000).nullable().optional(),
+  image: z.string().trim().nullable().optional(),
+  imagePosition: z.string().trim().max(100).nullable().optional(),
+  imageScale: z.number().min(0.5).max(3).nullable().optional(),
   linkedin: z.string().trim().max(1000).nullable().optional(),
 });
 
@@ -45,6 +47,8 @@ function sanitizeMember(m: z.infer<typeof TeamMemberSchema>): TeamMember {
     description: cleanDesc,
     initials: cleanInitials,
     image: cleanImage ? sanitizeSafeUrl(cleanImage, "/brand/placeholder.png") : undefined,
+    imagePosition: m.imagePosition?.trim() || undefined,
+    imageScale: typeof m.imageScale === "number" ? m.imageScale : undefined,
     linkedin: cleanLinkedin ? sanitizeSafeUrl(cleanLinkedin, "https://www.linkedin.com/") : undefined,
   };
 }

@@ -4,6 +4,8 @@ export interface TeamMember {
   description: string;
   initials?: string;
   image?: string;
+  imagePosition?: string;
+  imageScale?: number;
   linkedin?: string;
 }
 

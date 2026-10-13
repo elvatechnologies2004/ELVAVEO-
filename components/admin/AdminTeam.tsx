@@ -150,6 +150,8 @@ export default function AdminTeam() {
       initials: "",
       description: "",
       image: "",
+      imagePosition: "50% 20%",
+      imageScale: 1,
       linkedin: "https://www.linkedin.com/",
     });
     setIsAdding(true);
@@ -163,6 +165,8 @@ export default function AdminTeam() {
       initials: member.initials || "",
       description: member.description || "",
       image: member.image || "",
+      imagePosition: member.imagePosition || "50% 20%",
+      imageScale: typeof member.imageScale === "number" ? member.imageScale : 1,
       linkedin: member.linkedin || "",
     });
     setEditingMember({ member, index });
@@ -253,6 +257,8 @@ export default function AdminTeam() {
       description: trimmedDesc,
       initials,
       image: formState.image?.trim() || undefined,
+      imagePosition: formState.imagePosition?.trim() || undefined,
+      imageScale: formState.imageScale || 1,
       linkedin: linkedinUrl || undefined,
     };
 
@@ -542,6 +548,11 @@ export default function AdminTeam() {
                         fill
                         className="object-cover"
                         unoptimized
+                        style={{
+                          objectPosition: formState.imagePosition || "50% 20%",
+                          transform: `scale(${formState.imageScale || 1})`,
+                          transformOrigin: formState.imagePosition || "center",
+                        }}
                       />
                     ) : (
                       <span className="text-sm font-black text-blue">
@@ -592,6 +603,166 @@ export default function AdminTeam() {
                   </div>
                 </div>
               </div>
+
+              {/* Picture Frame Adjustment (Crop / Alignment / Zoom) */}
+              {formState.image && (
+                <div className="rounded-2xl border border-blue/20 bg-gradient-to-br from-blue/5 via-white to-violet/5 p-4 space-y-3.5 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-blue/10 pb-2.5">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-navy">
+                      <Sparkles size={13} className="text-cyan" />
+                      Picture Frame &amp; Face Alignment Controls
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormState({
+                          ...formState,
+                          imagePosition: "50% 20%",
+                          imageScale: 1,
+                        });
+                      }}
+                      className="text-[11px] font-bold text-blue hover:underline cursor-pointer"
+                    >
+                      Reset Frame
+                    </button>
+                  </div>
+
+                  {/* Live Interactive Framing Box & Controls */}
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                    {/* Simulated website frame */}
+                    <div className="flex flex-col items-center gap-1.5 shrink-0">
+                      <div className="relative h-28 w-36 overflow-hidden rounded-[20px] border-2 border-blue/30 bg-gradient-to-br from-[#d9f4ff] via-[#e9edff] to-[#f1e8ff] shadow-md flex items-center justify-center">
+                        <Image
+                          src={formState.image}
+                          alt="Framing preview"
+                          fill
+                          unoptimized
+                          className="object-cover transition-all duration-150"
+                          style={{
+                            objectPosition: formState.imagePosition || "50% 20%",
+                            transform: `scale(${formState.imageScale || 1})`,
+                            transformOrigin: formState.imagePosition || "center",
+                          }}
+                        />
+                        <div className="absolute inset-0 border border-white/40 pointer-events-none rounded-[18px]" />
+                        <span className="absolute bottom-1 right-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white tracking-wider pointer-events-none">
+                          WEBSITE FRAME
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-muted font-medium text-center">
+                        Matches live card shape
+                      </span>
+                    </div>
+
+                    {/* Frame Alignment Controls */}
+                    <div className="flex-1 space-y-3 w-full">
+                      {/* Focus Presets */}
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] font-bold text-navy mb-1.5">
+                          <span>Quick Focus Presets:</span>
+                          <span className="text-[10.5px] font-mono text-blue">
+                            {formState.imagePosition || "50% 20%"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { label: "Head/Face (Top)", val: "50% 12%" },
+                            { label: "Upper Body", val: "50% 25%" },
+                            { label: "Center", val: "50% 50%" },
+                            { label: "Lower", val: "50% 80%" },
+                          ].map((preset) => {
+                            const isSelected = formState.imagePosition === preset.val;
+                            return (
+                              <button
+                                key={preset.val}
+                                type="button"
+                                onClick={() =>
+                                  setFormState({ ...formState, imagePosition: preset.val })
+                                }
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "bg-blue text-white shadow-xs"
+                                    : "bg-white border border-blue/20 text-navy hover:bg-blue/10"
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Fine Vertical Position Slider */}
+                      <div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-navy font-semibold">Fine-tune Vertical Position (Y):</span>
+                          <span className="font-bold text-blue text-[10.5px]">
+                            {(() => {
+                              const parts = (formState.imagePosition || "50% 20%").split(" ");
+                              return parts[1] || "20%";
+                            })()}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={2}
+                          value={(() => {
+                            const parts = (formState.imagePosition || "50% 20%").split(" ");
+                            const yVal = parseInt(parts[1] || "20", 10);
+                            return isNaN(yVal) ? 20 : yVal;
+                          })()}
+                          onChange={(e) => {
+                            const y = e.target.value;
+                            const parts = (formState.imagePosition || "50% 20%").split(" ");
+                            const x = parts[0] || "50%";
+                            setFormState({
+                              ...formState,
+                              imagePosition: `${x} ${y}%`,
+                            });
+                          }}
+                          className="w-full h-1.5 bg-blue/20 rounded-lg appearance-none cursor-pointer accent-blue mt-1"
+                        />
+                        <div className="flex justify-between text-[9.5px] text-muted mt-0.5">
+                          <span>0% (Top of photo)</span>
+                          <span>50% (Center)</span>
+                          <span>100% (Bottom)</span>
+                        </div>
+                      </div>
+
+                      {/* Zoom / Scale Slider */}
+                      <div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-navy font-semibold">Zoom / Scale Size:</span>
+                          <span className="font-bold text-blue text-[10.5px]">
+                            {((formState.imageScale || 1) * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={1.6}
+                          step={0.05}
+                          value={formState.imageScale || 1}
+                          onChange={(e) => {
+                            setFormState({
+                              ...formState,
+                              imageScale: parseFloat(e.target.value),
+                            });
+                          }}
+                          className="w-full h-1.5 bg-blue/20 rounded-lg appearance-none cursor-pointer accent-blue mt-1"
+                        />
+                        <div className="flex justify-between text-[9.5px] text-muted mt-0.5">
+                          <span>100% (Normal)</span>
+                          <span>130%</span>
+                          <span>160% (Close-up)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Bio / Description */}
               <div>

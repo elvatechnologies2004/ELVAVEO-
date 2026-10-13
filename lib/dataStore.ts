@@ -57,6 +57,8 @@ function formatTeamTs(teamList: TeamMember[]): string {
   description: string;
   initials?: string;
   image?: string;
+  imagePosition?: string;
+  imageScale?: number;
   linkedin?: string;
 }
 
@@ -90,6 +92,8 @@ export async function getTeamMembers(): Promise<TeamMember[]> {
           description: row.description || "",
           initials: row.initials || undefined,
           image: row.image || undefined,
+          imagePosition: row.image_position || undefined,
+          imageScale: row.image_scale || undefined,
           linkedin: row.linkedin || undefined,
         }));
         memoryTeamCache = teamFromDb;
@@ -134,6 +138,8 @@ export async function saveTeamMembers(members: TeamMember[]): Promise<boolean> {
         description: m.description || "",
         initials: m.initials || null,
         image: m.image || null,
+        image_position: m.imagePosition || null,
+        image_scale: m.imageScale || null,
         linkedin: m.linkedin || null,
         sort_order: idx,
         updated_at: new Date().toISOString(),
