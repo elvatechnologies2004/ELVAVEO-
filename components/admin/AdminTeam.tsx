@@ -78,6 +78,9 @@ export default function AdminTeam() {
         const data = await res.json();
         if (data.team && Array.isArray(data.team)) {
           setMembers(data.team);
+          try {
+            localStorage.setItem("elvaveo_team_cache", JSON.stringify(data.team));
+          } catch {}
         }
       } else {
         console.warn("Could not fetch team from API, falling back to local dataset.");
@@ -109,6 +112,17 @@ export default function AdminTeam() {
       if (res.ok && data?.success) {
         const finalList = data.team && Array.isArray(data.team) ? data.team : updatedList;
         setMembers(finalList);
+
+        // Instantly sync to website (localStorage + BroadcastChannel)
+        try {
+          localStorage.setItem("elvaveo_team_cache", JSON.stringify(finalList));
+          if (typeof BroadcastChannel !== "undefined") {
+            const ch = new BroadcastChannel("elvaveo_team_sync");
+            ch.postMessage({ team: finalList });
+            ch.close();
+          }
+        } catch {}
+
         showToast(message, "success");
         return true;
       } else {

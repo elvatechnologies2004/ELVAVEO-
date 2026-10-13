@@ -14,12 +14,87 @@ export default function TeamSlider({
   members,
   autoPlayInterval = 3500,
 }: TeamSliderProps) {
+  // Live reactive team state initialized with server props
+  const [items, setItems] = useState<TeamMember[]>(members);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
+
+  // Sync with incoming server props when page transitions
+  useEffect(() => {
+    if (members && Array.isArray(members) && members.length > 0) {
+      setItems(members);
+    }
+  }, [members]);
+
+  // Live Real-Time Synchronization with Admin Panel & API
+  useEffect(() => {
+    // 1. Instant hydration from local cache if admin made live updates
+    try {
+      const cached = localStorage.getItem("elvaveo_team_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setItems(parsed);
+        }
+      }
+    } catch {}
+
+    // 2. Query live /api/admin/team endpoint with no-store
+    const fetchLiveTeam = async () => {
+      try {
+        const res = await fetch("/api/admin/team", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.team && Array.isArray(data.team) && data.team.length > 0) {
+            setItems(data.team);
+            try {
+              localStorage.setItem("elvaveo_team_cache", JSON.stringify(data.team));
+            } catch {}
+          }
+        }
+      } catch {}
+    };
+
+    fetchLiveTeam();
+
+    // 3. Real-time broadcast channel listener across open tabs
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        channel = new BroadcastChannel("elvaveo_team_sync");
+        channel.onmessage = (event) => {
+          if (event.data?.team && Array.isArray(event.data.team) && event.data.team.length > 0) {
+            setItems(event.data.team);
+          }
+        };
+      }
+    } catch {}
+
+    // 4. Storage event listener for cross-tab updates
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "elvaveo_team_cache" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setItems(parsed);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      channel?.close();
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   // Detect screen size for 2 cards per view (desktop) vs 1 card (mobile)
   useEffect(() => {
@@ -31,7 +106,7 @@ export default function TeamSlider({
     return () => window.removeEventListener("resize", checkScreen);
   }, []);
 
-  const totalCards = members.length;
+  const totalCards = items.length;
   // On desktop, 2 cards are visible, so max index is total - 2 (or total - 1 with wrap)
   const maxIndex = isDesktop ? Math.max(0, totalCards - 2) : totalCards - 1;
 
@@ -155,9 +230,9 @@ export default function TeamSlider({
             transform: `translateX(-${currentIndex * (isDesktop ? 50 : 100)}%)`,
           }}
         >
-          {members.map((member, index) => (
+          {items.map((member, index) => (
             <div
-              key={`${member.name}-${index}`}
+              key={`${member.name}-${member.linkedin || ""}-${member.role}-${index}`}
               className="w-full shrink-0 px-2 sm:px-3 md:w-1/2"
             >
               <div className="h-full">
