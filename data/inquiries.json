@@ -1,5 +1,250 @@
 [
   {
+    "id": "be2e00a7-f0b2-4bf2-a2c6-11e398389143",
+    "name": "Test Pipeline Lead",
+    "email": "pipeline@elvaveo.com",
+    "subject": "Software Development",
+    "message": "Test message end to end",
+    "status": "new",
+    "createdAt": "2026-10-13T12:01:12.427806+00:00",
+    "company": "Pipeline Test Inc",
+    "source": "Website Contact"
+  },
+  {
+    "id": "183f1084-587f-4c18-973c-d720178edf6d",
+    "name": "Jennifer Adams",
+    "email": "j.adams@stratacloud.io",
+    "subject": "Strata Cloud Solutions (Lead)",
+    "message": "Score 95/100 (High Priority ICP): Monolithic auth bottleneck verified; direct match for Custom SaaS multi-tenant architecture; technical contact channel available.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Strata Cloud Solutions",
+    "source": "AI Discovery",
+    "country": "USA",
+    "sourceUrl": "https://stratacloud.io",
+    "qualificationScore": 95,
+    "observations": [
+      "Customer dashboard uses monolithic PHP session cookies without RESTful tenant tokenization.",
+      "Public pricing tiers lack automated self-serve billing checkout and webhook entitlement sync.",
+      "API documentation indicates manual provisioning rather than multi-tenant automated provisioning."
+    ]
+  },
+  {
+    "id": "46d80f01-f559-4a98-b3d2-06b13721402b",
+    "name": "Robert Sterling",
+    "email": "rsterling@beaconhealthsystem.org",
+    "subject": "Beacon Health Systems (Lead)",
+    "message": "Score 84/100 (Moderate Fit): Generic form submission without CRM tracking; clear opportunity for automated intake pipelines.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Beacon Health Systems",
+    "source": "AI Discovery",
+    "country": "USA",
+    "sourceUrl": "https://beaconhealthsystem.org/contact",
+    "qualificationScore": 84,
+    "observations": [
+      "Contact forms submit to generic mailto handler with no automated CRM lead capture or tracking ID.",
+      "Patient partner intake workflow lacks automated bi-directional synchronization with centralized CRM.",
+      "No webhook-based lead qualification pipeline detected in frontend asset bundles."
+    ]
+  },
+  {
+    "id": "90bf3fe5-200d-4591-8b94-848e42e20275",
+    "name": "Oliver Wright",
+    "email": "o.wright@kensingtonengineering.co.uk",
+    "subject": "Kensington Engineering Group (Lead)",
+    "message": "Score 89/100 (High Priority ICP): End-of-life CMS architecture verified; prime candidate for Next.js modernization.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Kensington Engineering Group",
+    "source": "AI Discovery",
+    "country": "UK",
+    "sourceUrl": "https://kensingtonengineering.co.uk",
+    "qualificationScore": 89,
+    "observations": [
+      "Corporate site built on outdated Drupal 7 with end-of-life security support notices.",
+      "Sub-optimal mobile navigation menu with broken CSS flex wrap on tablet screens.",
+      "Static asset delivery lacks modern WebP/AVIF compression or HTTP/3 server push."
+    ]
+  },
+  {
+    "id": "067ef877-dd2a-4ae5-b2a6-c32177d574d0",
+    "name": "Alistair Vance",
+    "email": "alistair.vance@crestviewcapital.co.uk",
+    "subject": "Crestview Capital Partners (Lead)",
+    "message": "Score 90/100 (High Priority ICP): High-value institutional deal flow unrouted to CRM; verified investor relations endpoint.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Crestview Capital Partners",
+    "source": "AI Discovery",
+    "country": "UK",
+    "sourceUrl": "https://crestviewcapital.co.uk",
+    "qualificationScore": 90,
+    "observations": [
+      "Investor inquiry forms lack CRM pipeline automation, routing exclusively to static info@ inbox.",
+      "No lead scoring or deal lifecycle stage synchronization detected in client portal script bundle.",
+      "Missing automated follow-up trigger integration for institutional investment inquiries."
+    ]
+  },
+  {
+    "id": "180fecdf-8344-4e24-b913-a26bb59f7c0a",
+    "name": "Solutions Engineering",
+    "email": "info@mailbluesky.com",
+    "subject": "Bluesky Technologies (Lead)",
+    "message": "Score 94/100 (High Priority ICP): Multi-tenant architecture bottlenecks verified in Dubai logistics footprint; public verified corporate contact.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Bluesky Technologies",
+    "source": "AI Discovery",
+    "country": "UAE",
+    "sourceUrl": "https://bluesky.ae",
+    "qualificationScore": 94,
+    "observations": [
+      "Logistics management suite lacks multi-tenant tenant isolation and automated billing entitlement sync.",
+      "Customer dashboard experiences latency spikes under concurrent inventory queries across UAE warehouses.",
+      "REST API endpoints lack cryptographic idempotency on order transmission writes."
+    ]
+  },
+  {
+    "id": "03da4eb9-8bd4-40af-b68d-f0ee262b109e",
+    "name": "Digital Operations",
+    "email": "info@codeminer.co",
+    "subject": "CodeMiners UK (Lead)",
+    "message": "Score 93/100 (High Priority ICP): Verifiable 4.2s mobile LCP bottleneck; exact fit for Next.js modernization; public London business contact channel.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "CodeMiners UK",
+    "source": "AI Discovery",
+    "country": "UK",
+    "sourceUrl": "https://codeminer.co",
+    "qualificationScore": 93,
+    "observations": [
+      "Supply chain and logistics software showcase exhibits 4.2s LCP on mobile viewports.",
+      "Legacy client-side framework lacks server-side rendering for optimal technical SEO and speed.",
+      "Hero asset delivery lacks modern WebP/AVIF compression or HTTP/3 server push."
+    ]
+  },
+  {
+    "id": "bfa88743-7a99-4306-a6c1-cb1ded11048e",
+    "name": "Technology Inquiries",
+    "email": "info@prolim.com",
+    "subject": "PROLIM Technologies (Lead)",
+    "message": "Score 91/100 (High Priority ICP): Legacy monolithic architecture bottleneck; high-value custom software engineering need; verifiable public corporate inbox.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "PROLIM Technologies",
+    "source": "AI Discovery",
+    "country": "USA",
+    "sourceUrl": "https://prolim.com/contact",
+    "qualificationScore": 91,
+    "observations": [
+      "Enterprise IoT and PLM software portal relies on legacy monolithic CMS without micro-frontend isolation.",
+      "Customer portal response latency exceeds 2.5s under concurrent multi-tenant data queries.",
+      "Cloud platform integration endpoints lack automated rate-limiting headers (429 / Retry-After)."
+    ]
+  },
+  {
+    "id": "0ee40cb2-c340-42e2-8fcf-c3af094d52dc",
+    "name": "David Miller",
+    "email": "d.miller@apexlogistics.com",
+    "subject": "Apex Logistics Global (Lead)",
+    "message": "Score 92/100 (High Priority ICP): Critical 42/100 mobile performance audit; direct fit for Next.js modernization; verified corporate contact endpoint.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Apex Logistics Global",
+    "source": "AI Discovery",
+    "country": "USA",
+    "sourceUrl": "https://apexlogistics.com",
+    "qualificationScore": 92,
+    "observations": [
+      "Public web portal runs legacy WordPress with non-responsive table layouts on mobile viewports.",
+      "Google Lighthouse performance audit reports 42/100 Mobile Performance due to uncompressed hero assets.",
+      "No modern headless frontend (Next.js/React) or automated CDN edge caching detected."
+    ]
+  },
+  {
+    "id": "91240dfa-31d7-482b-b1f5-50937eae17f9",
+    "name": "Commercial Desk",
+    "email": "info@truebays.com",
+    "subject": "TrueBays IT Software (Lead)",
+    "message": "Score 91/100 (High Priority ICP): Intake forms lack automated CRM routing; prime match for automated intake pipelines; verified Dubai corporate inbox.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "TrueBays IT Software",
+    "source": "AI Discovery",
+    "country": "UAE",
+    "sourceUrl": "https://truebays.com",
+    "qualificationScore": 91,
+    "observations": [
+      "Business ERP/CRM intake forms route to static mailbox without automated deal qualification pipeline.",
+      "No bidirectional database synchronization detected between public catalog and CRM backend.",
+      "Client support requests lack automated SLA stage progression and status notification webhooks."
+    ]
+  },
+  {
+    "id": "41a30e7a-9585-4453-90e6-a218eb44f85b",
+    "name": "Operations Team",
+    "email": "info@freightsourcelogistics.com",
+    "subject": "Freight Source Logistics (Lead)",
+    "message": "Score 90/100 (High Priority ICP): Unrouted booking form without CRM integration; exact match for automated pipeline routing; public corporate channel verified.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Freight Source Logistics",
+    "source": "AI Discovery",
+    "country": "UK",
+    "sourceUrl": "https://freightsourcelogistics.com/contact",
+    "qualificationScore": 90,
+    "observations": [
+      "Multi-tier freight dispatch booking form submits to static inbox queue without CRM webhook automation.",
+      "No automated lead routing or SLA deal progression detected across international freight quotes.",
+      "Inquiry workflow lacks webhook-driven qualification and customer portal synchronization."
+    ]
+  },
+  {
+    "id": "d122dab6-c5f6-454e-90f5-56464cc1117f",
+    "name": "Elena Vance",
+    "email": "elena.vance@blackmesa-research.org",
+    "subject": "Black Mesa Research (Lead)",
+    "message": "Met at Austin Tech Summit 2026",
+    "status": "new",
+    "createdAt": "2026-10-08T18:56:00.586275+00:00",
+    "company": "Black Mesa Research",
+    "source": "CRM Import"
+  },
+  {
+    "id": "5c448a67-35f3-44b1-8456-422197eb94eb",
+    "name": "Jordan Lee",
+    "email": "jordan.lee@novatech.co",
+    "subject": "Nova Technologies (Lead)",
+    "message": "{\"lifecycle_stage\":\"qualified\"}",
+    "status": "new",
+    "createdAt": "2026-10-08T18:56:00.586275+00:00",
+    "company": "Nova Technologies",
+    "source": "CRM Import"
+  },
+  {
+    "id": "90c29670-6a8c-44f5-81e8-58a47acafb15",
+    "name": "Alex Turner",
+    "email": "alex.turner@apexcloud.io",
+    "subject": "Apex Cloud (Lead)",
+    "message": "Requested infrastructure demo via website form",
+    "status": "new",
+    "createdAt": "2026-10-08T18:56:00.586275+00:00",
+    "company": "Apex Cloud",
+    "source": "CRM Import"
+  },
+  {
+    "id": "0bcc0485-52d9-4823-a733-f1360a9b884a",
+    "name": "Sarah Connor",
+    "email": "sarah.connor@cyberdyne-sys.com",
+    "subject": "Cyberdyne Systems (Lead)",
+    "message": "No message body provided.",
+    "status": "new",
+    "createdAt": "2026-10-08T18:10:15.578888+00:00",
+    "company": "Cyberdyne Systems",
+    "source": "CRM Lead"
+  },
+  {
     "id": "inq-1791452881046-muh5u",
     "name": "faf",
     "email": "hussain.ali.power2go@gmail.com",

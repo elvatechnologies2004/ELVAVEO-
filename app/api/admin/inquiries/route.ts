@@ -1,48 +1,26 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { requireAdminAuth } from "@/lib/security";
 import { z } from "zod";
+import {
+  getInquiries,
+  addInquiry,
+  updateInquiryStatus,
+  deleteInquiry,
+  type InquiryItem,
+} from "@/lib/dataStore";
 
-export interface InquiryItem {
-  id: string;
-  name: string;
-  email: string;
-  subject: string;
-  message: string;
-  status: "new" | "replied" | "archived";
-  createdAt: string;
-}
+export { type InquiryItem };
 
-const INQUIRIES_PATH = path.join(process.cwd(), "data", "inquiries.json");
-
-async function readInquiries(): Promise<InquiryItem[]> {
-  try {
-    const raw = await fs.readFile(INQUIRIES_PATH, "utf-8");
-    return JSON.parse(raw) as InquiryItem[];
-  } catch (error) {
-    console.error("Error reading inquiries:", error);
-    return [];
-  }
-}
-
-async function writeInquiries(inquiries: InquiryItem[]): Promise<boolean> {
-  try {
-    // Keep list bounded to prevent unbounded storage growth
-    const bounded = inquiries.slice(0, 500);
-    await fs.writeFile(INQUIRIES_PATH, JSON.stringify(bounded, null, 2), "utf-8");
-    return true;
-  } catch (error) {
-    console.error("Error writing inquiries:", error);
-    return false;
-  }
-}
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const CreateInquirySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   email: z.string().trim().email("Valid email is required").max(254),
   subject: z.string().trim().max(120).default("General Inquiry"),
   message: z.string().trim().min(1, "Message is required").max(5000),
+  company: z.string().trim().max(120).optional(),
+  source: z.string().trim().max(80).optional(),
 });
 
 const UpdateInquirySchema = z.object({
@@ -54,12 +32,16 @@ export async function GET(request: Request) {
   const auth = await requireAdminAuth(request);
   if (!auth.authenticated) return auth.errorResponse;
 
-  const inquiries = await readInquiries();
+  const inquiries = await getInquiries(true);
   return NextResponse.json(
     { success: true, inquiries },
     {
       status: 200,
-      headers: { "Cache-Control": "no-store, max-age=0" },
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
     }
   );
 }
@@ -79,26 +61,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const { name, email, subject, message } = parsed.data;
-    const inquiries = await readInquiries();
-
-    const newInquiry: InquiryItem = {
-      id: `inq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    const { name, email, subject, message, company, source } = parsed.data;
+    const newInquiry = await addInquiry({
       name,
       email,
       subject,
       message,
-      status: "new",
-      createdAt: new Date().toISOString(),
-    };
-
-    inquiries.unshift(newInquiry);
-    await writeInquiries(inquiries);
+      company,
+      source: source || "CRM Manual",
+    });
 
     return NextResponse.json({ success: true, inquiry: newInquiry }, { status: 201 });
-  } catch {
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: "Failed to create inquiry" },
+      { success: false, error: err?.message || "Failed to create inquiry" },
       { status: 500 }
     );
   }
@@ -120,23 +96,19 @@ export async function PATCH(request: Request) {
     }
 
     const { id, status } = parsed.data;
-    const inquiries = await readInquiries();
-    const index = inquiries.findIndex((i) => i.id === id);
+    const updated = await updateInquiryStatus(id, status);
 
-    if (index === -1) {
+    if (!updated) {
       return NextResponse.json(
         { success: false, error: "Inquiry not found" },
         { status: 404 }
       );
     }
 
-    inquiries[index].status = status;
-    await writeInquiries(inquiries);
-
-    return NextResponse.json({ success: true, inquiry: inquiries[index] }, { status: 200 });
-  } catch {
+    return NextResponse.json({ success: true, inquiry: updated }, { status: 200 });
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: "Failed to update inquiry" },
+      { success: false, error: err?.message || "Failed to update inquiry" },
       { status: 500 }
     );
   }
@@ -157,14 +129,12 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const inquiries = await readInquiries();
-    const filtered = inquiries.filter((i) => i.id !== id);
-    await writeInquiries(filtered);
+    await deleteInquiry(id);
 
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch {
+  } catch (err: any) {
     return NextResponse.json(
-      { success: false, error: "Failed to delete inquiry" },
+      { success: false, error: err?.message || "Failed to delete inquiry" },
       { status: 500 }
     );
   }

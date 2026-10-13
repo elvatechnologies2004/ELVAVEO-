@@ -143,6 +143,8 @@ export default function AdminPage() {
     email: string;
     subject: string;
     message: string;
+    company?: string;
+    source?: string;
   }) => {
     try {
       const res = await fetch("/api/admin/inquiries", {

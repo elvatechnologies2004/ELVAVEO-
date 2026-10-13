@@ -223,6 +223,11 @@ export default function AdminOverview({
                       <div className="flex items-center gap-2">
                         <p className="truncate text-[14px] font-bold text-navy group-hover:text-blue transition-colors">
                           {inquiry.name}
+                          {inquiry.company && (
+                            <span className="ml-1.5 text-[11px] font-medium text-blue">
+                              &bull; {inquiry.company}
+                            </span>
+                          )}
                         </p>
                         {isNew ? (
                           <span className="rounded-full bg-blue/10 px-2 py-0.5 text-[10px] font-bold text-blue">

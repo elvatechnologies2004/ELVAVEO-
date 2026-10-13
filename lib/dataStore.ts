@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { teamMembers as defaultTeam, type TeamMember } from "@/data/team";
 import { products as defaultProducts, type Product } from "@/data/products";
 import { showcaseProjects as defaultProjects } from "@/data/projectShowcase";
@@ -13,6 +14,7 @@ const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
 const PRODUCTS_TS_FILE = path.join(DATA_DIR, "products.ts");
 const PROJECTS_FILE = path.join(DATA_DIR, "projects.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+const INQUIRIES_FILE = path.join(DATA_DIR, "inquiries.json");
 
 // Serverless writable cache fallback (for platforms like Vercel where process.cwd() is read-only)
 const TMP_DIR = path.join(os.tmpdir(), "elvaveo_store");
@@ -20,12 +22,16 @@ const TMP_TEAM_FILE = path.join(TMP_DIR, "team.json");
 const TMP_PRODUCTS_FILE = path.join(TMP_DIR, "products.json");
 const TMP_PROJECTS_FILE = path.join(TMP_DIR, "projects.json");
 const TMP_SETTINGS_FILE = path.join(TMP_DIR, "settings.json");
+const TMP_INQUIRIES_FILE = path.join(TMP_DIR, "inquiries.json");
+const TMP_DELETED_INQUIRIES_FILE = path.join(TMP_DIR, "deleted_inquiries.json");
 
 // In-memory cache to guarantee immediate cross-route reactivity within the runtime
 let memoryTeamCache: TeamMember[] | null = null;
 let memoryProductsCache: Product[] | null = null;
 let memoryProjectsCache: StoredProject[] | null = null;
 let memorySettingsCache: SiteSettings | null = null;
+let memoryInquiriesCache: InquiryItem[] | null = null;
+let memoryDeletedInquiryIds = new Set<string>();
 
 /** Safe JSON reader */
 async function readJson<T>(filePath: string, fallback: T): Promise<T> {
@@ -480,4 +486,348 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<boolean>
   } catch {}
 
   return fsSaved || tmpSaved || true;
+}
+
+// ==================== INQUIRIES & LEADS ====================
+export interface InquiryItem {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: "new" | "replied" | "archived";
+  createdAt: string;
+  company?: string;
+  source?: string;
+  country?: string;
+  sourceUrl?: string;
+  qualificationScore?: number;
+  observations?: string[];
+}
+
+/**
+ * Transforms a raw row from the Supabase `leads` table into an `InquiryItem`
+ */
+function mapLeadToInquiry(lead: any): InquiryItem {
+  const nameParts = [lead.first_name, lead.last_name].filter(Boolean);
+  const fullName = nameParts.join(" ").trim();
+  const name = fullName || lead.company || "Prospective Client";
+
+  let subject = lead.target_service
+    ? lead.target_service
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : lead.company
+    ? `${lead.company} (Lead)`
+    : "Business Lead";
+
+  let message = lead.notes || "";
+  let observations: string[] = [];
+  let qualificationScore: number | undefined =
+    typeof lead.qualification_score === "number" ? lead.qualification_score : undefined;
+  let country: string | undefined = lead.country || undefined;
+  let sourceUrl: string | undefined = lead.source_url || undefined;
+
+  if (typeof lead.notes === "string" && lead.notes.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(lead.notes);
+      if (parsed.subject) subject = parsed.subject;
+      if (parsed.message) message = parsed.message;
+      else if (parsed.qualification_explanation) message = parsed.qualification_explanation;
+      if (Array.isArray(parsed.business_observations)) observations = parsed.business_observations;
+      if (typeof parsed.qualification_score === "number") qualificationScore = parsed.qualification_score;
+      if (parsed.country) country = parsed.country;
+      if (parsed.source_url) sourceUrl = parsed.source_url;
+    } catch {
+      // Keep plain notes string
+    }
+  }
+
+  const rawStatus: "new" | "replied" | "archived" =
+    lead.status === "replied" || lead.status === "contacted"
+      ? "replied"
+      : lead.status === "archived"
+      ? "archived"
+      : "new";
+
+  let sourceLabel = "CRM Lead";
+  if (lead.source === "ai_discovery_engine") sourceLabel = "AI Discovery";
+  else if (lead.source === "csv_import") sourceLabel = "CRM Import";
+  else if (lead.source === "web_contact_form" || lead.source === "web_form") sourceLabel = "Website Contact";
+  else if (lead.source) sourceLabel = lead.source;
+
+  return {
+    id: lead.id,
+    name,
+    email: lead.email,
+    subject,
+    message: message || "No message body provided.",
+    status: rawStatus,
+    createdAt: lead.created_at || new Date().toISOString(),
+    company: lead.company || undefined,
+    source: sourceLabel,
+    country,
+    sourceUrl,
+    qualificationScore,
+    observations: observations.length > 0 ? observations : undefined,
+  };
+}
+
+/**
+ * Retrieves inquiries and CRM leads with multi-tier fallback:
+ * In-memory -> Supabase Storage (store/inquiries.json) -> /tmp -> data/inquiries.json + Supabase `leads` table
+ */
+export async function getInquiries(forceRefresh: boolean = false): Promise<InquiryItem[]> {
+  if (!forceRefresh && memoryInquiriesCache && memoryInquiriesCache.length > 0) {
+    return memoryInquiriesCache;
+  }
+
+  const supabase = getSupabaseClient();
+  let storedList: InquiryItem[] = [];
+
+  // 1. Try Supabase Storage (store/inquiries.json)
+  if (supabase) {
+    try {
+      const { data: storageFile, error: storageErr } = await supabase.storage
+        .from("uploads")
+        .download("store/inquiries.json");
+      if (!storageErr && storageFile) {
+        const text = await storageFile.text();
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          storedList = parsed;
+        }
+      }
+    } catch (err) {
+      console.warn("[dataStore] Supabase storage download warning:", err);
+    }
+  }
+
+  // 2. Fallback to /tmp runtime cache (Vercel)
+  if (storedList.length === 0) {
+    const tmpInquiries = await readJson<InquiryItem[] | null>(TMP_INQUIRIES_FILE, null);
+    if (tmpInquiries && Array.isArray(tmpInquiries) && tmpInquiries.length > 0) {
+      storedList = tmpInquiries;
+    }
+  }
+
+  // 3. Fallback to local repo data/inquiries.json
+  if (storedList.length === 0) {
+    const localInquiries = await readJson<InquiryItem[] | null>(INQUIRIES_FILE, null);
+    if (localInquiries && Array.isArray(localInquiries) && localInquiries.length > 0) {
+      storedList = localInquiries;
+    }
+  }
+
+  // 4. Fetch live CRM Leads from Supabase `leads` table
+  let dbLeads: InquiryItem[] = [];
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && Array.isArray(data)) {
+        dbLeads = data.map(mapLeadToInquiry);
+      }
+    } catch (err) {
+      console.warn("[dataStore] Supabase leads query warning:", err);
+    }
+  }
+
+  // 5. Merge and deduplicate
+  const combinedMap = new Map<string, InquiryItem>();
+
+  // Add dbLeads first
+  for (const lead of dbLeads) {
+    combinedMap.set(lead.id, lead);
+  }
+
+  // Overlay storedList (which contains user status updates, web submissions, etc.)
+  for (const item of storedList) {
+    if (combinedMap.has(item.id)) {
+      const existing = combinedMap.get(item.id)!;
+      combinedMap.set(item.id, {
+        ...existing,
+        ...item,
+        status: item.status || existing.status,
+      });
+    } else {
+      combinedMap.set(item.id, item);
+    }
+  }
+
+  // Load deleted tombstones if not in memory
+  if (memoryDeletedInquiryIds.size === 0) {
+    const persistedDeleted = await readJson<string[] | null>(TMP_DELETED_INQUIRIES_FILE, null);
+    if (persistedDeleted && Array.isArray(persistedDeleted)) {
+      memoryDeletedInquiryIds = new Set(persistedDeleted);
+    }
+  }
+
+  const result = Array.from(combinedMap.values())
+    .filter((item) => !memoryDeletedInquiryIds.has(item.id))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  memoryInquiriesCache = result;
+  return result;
+}
+
+/**
+ * Persists inquiries to Supabase Storage, /tmp runtime cache, and local file.
+ */
+export async function saveInquiries(inquiries: InquiryItem[]): Promise<boolean> {
+  const bounded = inquiries.slice(0, 500);
+  memoryInquiriesCache = [...bounded];
+
+  const supabase = getSupabaseClient();
+  let supabaseSaved = false;
+  if (supabase) {
+    try {
+      const { error } = await supabase.storage
+        .from("uploads")
+        .upload("store/inquiries.json", JSON.stringify(bounded, null, 2), {
+          upsert: true,
+          contentType: "application/json",
+        });
+      if (!error) {
+        supabaseSaved = true;
+      }
+    } catch (err) {
+      console.warn("[dataStore] Supabase storage upload warning:", err);
+    }
+  }
+
+  let tmpSaved = false;
+  try {
+    tmpSaved = await writeJson(TMP_INQUIRIES_FILE, bounded);
+  } catch {}
+
+  let fsSaved = false;
+  try {
+    fsSaved = await writeJson(INQUIRIES_FILE, bounded);
+  } catch {}
+
+  return supabaseSaved || tmpSaved || fsSaved || true;
+}
+
+/**
+ * Adds a new inquiry or lead, syncing across Supabase `leads` table,
+ * Supabase Storage, /tmp, and in-memory cache.
+ */
+export async function addInquiry(item: {
+  name: string;
+  email: string;
+  subject?: string;
+  message: string;
+  company?: string;
+  source?: string;
+}): Promise<InquiryItem> {
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const newInquiry: InquiryItem = {
+    id,
+    name: item.name.trim(),
+    email: item.email.trim(),
+    subject: item.subject?.trim() || "General Inquiry",
+    message: item.message.trim(),
+    company: item.company?.trim() || undefined,
+    source: item.source || "Website Contact",
+    status: "new",
+    createdAt: now,
+  };
+
+  // Sync to Supabase leads table with identical UUID
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const parts = newInquiry.name.split(" ");
+      const firstName = parts[0] || newInquiry.name;
+      const lastName = parts.slice(1).join(" ") || "";
+      await supabase.from("leads").insert({
+        id: id,
+        workspace_id: "00000000-0000-0000-0000-000000000001",
+        email: newInquiry.email,
+        first_name: firstName,
+        last_name: lastName,
+        company: newInquiry.company || null,
+        status: "new",
+        source: item.source === "CRM Manual" ? "manual_entry" : "web_contact_form",
+        notes: JSON.stringify({
+          subject: newInquiry.subject,
+          message: newInquiry.message,
+          submitted_at: now,
+        }),
+        consent_status: "opted_in",
+        consent_source: "web_form",
+        consent_timestamp: now,
+      });
+    } catch (err) {
+      console.warn("[dataStore] Supabase lead insert warning:", err);
+    }
+  }
+
+  // Prepend to inquiries and save
+  const current = await getInquiries(true);
+  const updated = [newInquiry, ...current.filter((i) => i.id !== id)];
+  await saveInquiries(updated);
+
+  return newInquiry;
+}
+
+/**
+ * Updates status of an inquiry or lead (new, replied, archived).
+ */
+export async function updateInquiryStatus(
+  id: string,
+  status: "new" | "replied" | "archived"
+): Promise<InquiryItem | null> {
+  const current = await getInquiries();
+  const target = current.find((i) => i.id === id);
+  if (!target) return null;
+
+  target.status = status;
+  await saveInquiries(current);
+
+  const supabase = getSupabaseClient();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (supabase && isUuid) {
+    try {
+      const dbStatus = status === "replied" ? "replied" : status === "archived" ? "contacted" : "new";
+      await supabase
+        .from("leads")
+        .update({ status: dbStatus, updated_at: new Date().toISOString() })
+        .eq("id", id);
+    } catch (err) {
+      console.warn("[dataStore] Supabase lead status update warning:", err);
+    }
+  }
+
+  return target;
+}
+
+/**
+ * Permanently deletes an inquiry or lead from all storage tiers.
+ */
+export async function deleteInquiry(id: string): Promise<boolean> {
+  memoryDeletedInquiryIds.add(id);
+  try {
+    await writeJson(TMP_DELETED_INQUIRIES_FILE, Array.from(memoryDeletedInquiryIds));
+  } catch {}
+
+  const current = await getInquiries();
+  const filtered = current.filter((i) => i.id !== id);
+  await saveInquiries(filtered);
+
+  const supabase = getSupabaseClient();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  if (supabase && isUuid) {
+    try {
+      await supabase.from("leads").delete().eq("id", id);
+    } catch (err) {
+      console.warn("[dataStore] Supabase lead delete warning:", err);
+    }
+  }
+
+  return true;
 }

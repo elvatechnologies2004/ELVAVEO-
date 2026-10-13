@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { CONTACT_SUBJECTS, type ContactApiResponse } from "@/types";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { sendEmailViaSMTP } from "@/lib/smtpMail";
+import { addInquiry } from "@/lib/dataStore";
 import { z } from "zod";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -79,31 +78,18 @@ export async function POST(request: Request) {
     return json({ success: true, message: "Message sent successfully." }, 200);
   }
 
-  // 1. Store inquiry safely in data/inquiries.json (bounded to 500 items max)
+  // 1. Store inquiry safely and reliably across serverless memory, /tmp, and Supabase
   try {
-    const inquiriesPath = path.join(process.cwd(), "data", "inquiries.json");
-    const raw = await fs.readFile(inquiriesPath, "utf-8").catch(() => "[]");
-    let currentList: any[] = [];
-    try {
-      currentList = JSON.parse(raw);
-    } catch {
-      currentList = [];
-    }
-
-    currentList.unshift({
-      id: `inq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    await addInquiry({
       name,
       email,
       subject,
       message,
-      status: "new",
-      createdAt: new Date().toISOString(),
+      company: company || undefined,
+      source: "Website Contact",
     });
-
-    const bounded = currentList.slice(0, 500);
-    await fs.writeFile(inquiriesPath, JSON.stringify(bounded, null, 2), "utf-8");
   } catch (err) {
-    console.error("[contact] Failed to store inquiry in admin data:", err);
+    console.error("[contact] Failed to store inquiry in dataStore:", err);
   }
 
   const recipient = process.env.CONTACT_EMAIL?.trim() || "hello@elvaveo.com";
