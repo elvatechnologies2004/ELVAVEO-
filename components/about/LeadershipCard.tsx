@@ -79,6 +79,7 @@ export default function LeadershipCard(props: LeadershipCardProps) {
             src={image}
             alt={name}
             fill
+            unoptimized
             sizes="(min-width: 640px) 144px, 96px"
             className="h-full w-full object-cover"
           />

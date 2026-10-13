@@ -270,12 +270,17 @@ export function verifyTwoFactorToken(enteredCode: string, userKey: string = "adm
 }
 
 /**
- * URL sanitizer to prevent javascript: or data: URL-based injection attacks
+ * URL sanitizer to prevent javascript: or malformed injection attacks.
+ * Allows valid https?, relative paths, and safe base64 image data URLs.
  */
 export function sanitizeSafeUrl(rawUrl: string, fallback: string = "#"): string {
   if (!rawUrl || typeof rawUrl !== "string") return fallback;
   const trimmed = rawUrl.trim();
-  if (/^https?:\/\//i.test(trimmed) || /^\/[a-zA-Z0-9_\-./]*$/i.test(trimmed)) {
+  if (
+    /^https?:\/\//i.test(trimmed) ||
+    /^\/[a-zA-Z0-9_\-./]*$/i.test(trimmed) ||
+    /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)
+  ) {
     return trimmed;
   }
   return fallback;

@@ -248,13 +248,16 @@ export async function POST(request: Request) {
         { status: 201 }
       );
     } catch (fsErr) {
-      console.warn("[upload] Local filesystem write failed (serverless environment):", fsErr);
+      console.warn("[upload] Local filesystem write failed (serverless environment), falling back to optimized Data URL:", fsErr);
+      const dataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
       return NextResponse.json(
         {
-          success: false,
-          error: "Cloud filesystem is read-only. Please paste an image URL directly into the profile image field, or configure Supabase Storage.",
+          success: true,
+          url: dataUrl,
+          fileName: safeFileName,
+          isDataUrl: true,
         },
-        { status: 400 }
+        { status: 201 }
       );
     }
   } catch (error) {
