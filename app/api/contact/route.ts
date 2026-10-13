@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { CONTACT_SUBJECTS, type ContactApiResponse } from "@/types";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
-import { sendEmailViaSMTP } from "@/lib/smtpMail";
 import { addInquiry } from "@/lib/dataStore";
 import { z } from "zod";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const DEFAULT_FROM = "ELVAVEO Website <notifications@notify.elvaveo.com>";
+const DEFAULT_RECIPIENT = "hello@elvaveo.com";
 
 const ContactSchema = z.object({
   name: z.string().trim().min(1, "Please provide your name.").max(120),
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
     return json({ success: true, message: "Message sent successfully." }, 200);
   }
 
-  // 1. Store inquiry safely and reliably across serverless memory, /tmp, and Supabase
+  // 1. Store inquiry safely in admin database / Supabase so leads are never lost
   try {
     await addInquiry({
       name,
@@ -92,79 +93,123 @@ export async function POST(request: Request) {
     console.error("[contact] Failed to store inquiry in dataStore:", err);
   }
 
-  const recipient = process.env.CONTACT_EMAIL?.trim() || "hello@elvaveo.com";
-  const smtpPass = process.env.SMTP_PASS?.trim() || process.env.SMTP_PASSWORD?.trim();
+  // 2. Validate Resend API Configuration
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
-
-  // 2. Dispatch via SMTP (Python smtplib primary, Node SMTP fallback) if SMTP is configured
-  if (smtpPass) {
-    try {
-      const smtpResult = await sendEmailViaSMTP({
-        name,
-        email,
-        subject,
-        message,
-        to: recipient,
-      });
-
-      if (smtpResult.success) {
-        console.log(`[contact] Email sent successfully via SMTP (${smtpResult.method}) to ${recipient}`);
-        return json({ success: true, message: "Message sent successfully." }, 200);
-      }
-      console.warn("[contact] SMTP dispatch failed, trying Resend fallback if available:", smtpResult.error);
-    } catch (smtpErr) {
-      console.error("[contact] SMTP execution error:", smtpErr);
-    }
+  if (!resendApiKey) {
+    console.warn("[contact] RESEND_API_KEY environment variable is not configured.");
+    return fail(
+      "Our contact form is temporarily unavailable. Please email us directly at hello@elvaveo.com.",
+      503
+    );
   }
 
-  // 3. Dispatch via Resend API if API Key is available
-  if (resendApiKey) {
-    const from = process.env.RESEND_FROM_EMAIL?.trim() || "ELVAVEO <hello@elvaveo.com>";
-    const text = [
-      message,
-      "",
-      "—",
-      `Name: ${name}`,
-      `Email: ${email}`,
-      `Topic: ${subject}`,
-    ].join("\n");
+  const recipient = process.env.CONTACT_EMAIL?.trim() || DEFAULT_RECIPIENT;
+  const from = process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM;
 
-    const html = `
-      <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;color:#081b3d">
-        <p style="white-space:pre-wrap;margin:0 0 20px">${escapeHtml(message)}</p>
-        <hr style="border:0;border-top:1px solid #e2e6ef;margin:0 0 16px" />
-        <p style="margin:0"><strong>Name:</strong> ${escapeHtml(name)}<br />
-        <strong>Email:</strong> ${escapeHtml(email)}<br />
-        <strong>Topic:</strong> ${escapeHtml(subject)}</p>
+  const text = [
+    `New message from ELVAVEO website contact form:`,
+    ``,
+    `Name: ${name}`,
+    `Email: ${email}`,
+    `Topic: ${subject}`,
+    ``,
+    `Message:`,
+    message,
+    ``,
+    `—`,
+    `Submitted at: ${new Date().toISOString()}`,
+    `Client IP: ${ip}`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#081b3d;max-width:600px;margin:0 auto;padding:24px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0">
+      <div style="border-bottom:2px solid #2563ff;padding-bottom:12px;margin-bottom:20px">
+        <h2 style="margin:0;color:#081b3d;font-size:20px">New Website Contact Inquiry</h2>
+        <span style="display:inline-block;padding:3px 10px;background:#eff6ff;color:#2563ff;font-weight:600;font-size:12px;border-radius:12px;margin-top:6px">${escapeHtml(subject)}</span>
       </div>
-    `;
+      <table style="width:100%;margin-bottom:16px;border-collapse:collapse;font-size:14px">
+        <tr>
+          <td style="padding:6px 0;color:#61708f;width:80px;font-weight:600">Name:</td>
+          <td style="padding:6px 0;color:#081b3d"><strong>${escapeHtml(name)}</strong></td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;color:#61708f;font-weight:600">Email:</td>
+          <td style="padding:6px 0;color:#081b3d"><a href="mailto:${escapeHtml(email)}" style="color:#2563ff;text-decoration:none">${escapeHtml(email)}</a></td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;color:#61708f;font-weight:600">Topic:</td>
+          <td style="padding:6px 0;color:#081b3d">${escapeHtml(subject)}</td>
+        </tr>
+      </table>
+      <div style="background:#f8fafc;padding:16px;border-radius:8px;border-left:4px solid #2563ff;margin-bottom:20px">
+        <p style="margin:0;white-space:pre-wrap;font-size:14.5px;color:#081b3d">${escapeHtml(message)}</p>
+      </div>
+      <hr style="border:0;border-top:1px solid #e2e8f0;margin:16px 0" />
+      <p style="margin:0;font-size:11px;color:#94a3b8">
+        Sender: ${escapeHtml(from)} &bull; Recipient: ${escapeHtml(recipient)} &bull; Reply-To: ${escapeHtml(email)}
+      </p>
+    </div>
+  `;
 
-    try {
-      const resendResponse = await fetch(RESEND_ENDPOINT, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
+  // 3. Dispatch via Resend HTTP API
+  try {
+    const resendResponse = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [recipient],
+        reply_to: email,
+        subject: `[${subject}] ${name}`,
+        text,
+        html,
+      }),
+    });
+
+    const requestId =
+      resendResponse.headers.get("x-request-id") ||
+      resendResponse.headers.get("x-resend-request-id") ||
+      "none";
+
+    if (resendResponse.ok) {
+      const resendData = (await resendResponse.json().catch(() => ({}))) as { id?: string };
+      const emailId = resendData.id || "accepted";
+      console.log(
+        `[contact] Resend accepted email: id=${emailId}, requestId=${requestId}, recipient=${recipient}`
+      );
+      return json(
+        {
+          success: true,
+          message: "Your message has been sent successfully. We will get back to you shortly.",
         },
-        body: JSON.stringify({
-          from,
-          to: [recipient],
-          reply_to: email,
-          subject: `[${subject}] ${name}`,
-          text,
-          html,
-        }),
-      });
-
-      if (resendResponse.ok) {
-        console.log(`[contact] Email delivered via Resend to ${recipient}`);
-        return json({ success: true, message: "Message sent successfully." }, 200);
-      }
-    } catch (resendErr) {
-      console.warn("[contact] Resend API request failed:", resendErr);
+        200
+      );
     }
-  }
 
-  // Inquiry is safely recorded in admin database even if outward notification encountered issue
-  return json({ success: true, message: "Message sent successfully." }, 200);
+    // Handle Resend rejection
+    const rawError = await resendResponse.text().catch(() => "");
+    let errorDetail = rawError;
+    try {
+      const parsedError = JSON.parse(rawError);
+      errorDetail = parsedError.message || parsedError.name || rawError;
+    } catch {}
+
+    console.error(
+      `[contact] Resend API error: status=${resendResponse.status}, requestId=${requestId}, detail=${errorDetail}`
+    );
+
+    return fail(
+      "We could not send your message at this time. Please try again or email us directly at hello@elvaveo.com.",
+      502
+    );
+  } catch (err: any) {
+    console.error("[contact] Resend dispatch network error:", err?.message || err);
+    return fail(
+      "A network error occurred while sending your message. Please try again or email us directly at hello@elvaveo.com.",
+      500
+    );
+  }
 }

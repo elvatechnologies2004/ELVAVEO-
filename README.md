@@ -66,17 +66,17 @@ copy .env.example .env.local      # Windows PowerShell
 
 `.env.local` is gitignored. Only `.env.example` is committed.
 
-### Important: verify your Resend domain
+### Resend Sending Domain
 
-Until `elvaveo.com` is verified in Resend, the route falls back to
-`onboarding@resend.dev`, which **only delivers to your own Resend account**.
-The form will report success while the mail goes nowhere.
+The verified sending domain in Resend is `notify.elvaveo.com`.
+The incoming business email is hosted separately on OmuCloud (`hello@elvaveo.com`).
+The contact form sends from: `ELVAVEO Website <notifications@notify.elvaveo.com>`
+with Reply-To set to the customer's validated email address.
 
-To go live:
-
-1. Resend → **Domains** → add `elvaveo.com`.
-2. Add the DNS records Resend shows you (SPF, DKIM, MX) at your DNS provider.
-3. Once verified, set `RESEND_FROM_EMAIL="ELVAVEO <hello@elvaveo.com>"`.
+Set on Vercel:
+- `RESEND_API_KEY`: Production Resend API Key (`re_...`)
+- `RESEND_FROM_EMAIL`: `"ELVAVEO Website <notifications@notify.elvaveo.com>"`
+- `CONTACT_EMAIL`: `hello@elvaveo.com`
 
 ---
 
