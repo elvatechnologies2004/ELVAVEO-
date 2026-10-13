@@ -5,28 +5,47 @@
     "email": "pipeline@elvaveo.com",
     "subject": "Software Development",
     "message": "Test message end to end",
-    "status": "new",
+    "status": "replied",
     "createdAt": "2026-10-13T12:01:12.427806+00:00",
     "company": "Pipeline Test Inc",
     "source": "Website Contact"
   },
   {
-    "id": "183f1084-587f-4c18-973c-d720178edf6d",
-    "name": "Jennifer Adams",
-    "email": "j.adams@stratacloud.io",
-    "subject": "Strata Cloud Solutions (Lead)",
-    "message": "Score 95/100 (High Priority ICP): Monolithic auth bottleneck verified; direct match for Custom SaaS multi-tenant architecture; technical contact channel available.",
+    "id": "180fecdf-8344-4e24-b913-a26bb59f7c0a",
+    "name": "Solutions Engineering",
+    "email": "info@mailbluesky.com",
+    "subject": "Bluesky Technologies (Lead)",
+    "message": "Score 94/100 (High Priority ICP): Multi-tenant architecture bottlenecks verified in Dubai logistics footprint; public verified corporate contact.",
     "status": "new",
     "createdAt": "2026-10-10T03:31:45.883079+00:00",
-    "company": "Strata Cloud Solutions",
+    "company": "Bluesky Technologies",
     "source": "AI Discovery",
-    "country": "USA",
-    "sourceUrl": "https://stratacloud.io",
-    "qualificationScore": 95,
+    "country": "UAE",
+    "sourceUrl": "https://bluesky.ae",
+    "qualificationScore": 94,
     "observations": [
-      "Customer dashboard uses monolithic PHP session cookies without RESTful tenant tokenization.",
-      "Public pricing tiers lack automated self-serve billing checkout and webhook entitlement sync.",
-      "API documentation indicates manual provisioning rather than multi-tenant automated provisioning."
+      "Logistics management suite lacks multi-tenant tenant isolation and automated billing entitlement sync.",
+      "Customer dashboard experiences latency spikes under concurrent inventory queries across UAE warehouses.",
+      "REST API endpoints lack cryptographic idempotency on order transmission writes."
+    ]
+  },
+  {
+    "id": "41a30e7a-9585-4453-90e6-a218eb44f85b",
+    "name": "Operations Team",
+    "email": "info@freightsourcelogistics.com",
+    "subject": "Freight Source Logistics (Lead)",
+    "message": "Score 90/100 (High Priority ICP): Unrouted booking form without CRM integration; exact match for automated pipeline routing; public corporate channel verified.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Freight Source Logistics",
+    "source": "AI Discovery",
+    "country": "UK",
+    "sourceUrl": "https://freightsourcelogistics.com/contact",
+    "qualificationScore": 90,
+    "observations": [
+      "Multi-tier freight dispatch booking form submits to static inbox queue without CRM webhook automation.",
+      "No automated lead routing or SLA deal progression detected across international freight quotes.",
+      "Inquiry workflow lacks webhook-driven qualification and customer portal synchronization."
     ]
   },
   {
@@ -87,25 +106,6 @@
     ]
   },
   {
-    "id": "180fecdf-8344-4e24-b913-a26bb59f7c0a",
-    "name": "Solutions Engineering",
-    "email": "info@mailbluesky.com",
-    "subject": "Bluesky Technologies (Lead)",
-    "message": "Score 94/100 (High Priority ICP): Multi-tenant architecture bottlenecks verified in Dubai logistics footprint; public verified corporate contact.",
-    "status": "new",
-    "createdAt": "2026-10-10T03:31:45.883079+00:00",
-    "company": "Bluesky Technologies",
-    "source": "AI Discovery",
-    "country": "UAE",
-    "sourceUrl": "https://bluesky.ae",
-    "qualificationScore": 94,
-    "observations": [
-      "Logistics management suite lacks multi-tenant tenant isolation and automated billing entitlement sync.",
-      "Customer dashboard experiences latency spikes under concurrent inventory queries across UAE warehouses.",
-      "REST API endpoints lack cryptographic idempotency on order transmission writes."
-    ]
-  },
-  {
     "id": "03da4eb9-8bd4-40af-b68d-f0ee262b109e",
     "name": "Digital Operations",
     "email": "info@codeminer.co",
@@ -163,6 +163,25 @@
     ]
   },
   {
+    "id": "183f1084-587f-4c18-973c-d720178edf6d",
+    "name": "Jennifer Adams",
+    "email": "j.adams@stratacloud.io",
+    "subject": "Strata Cloud Solutions (Lead)",
+    "message": "Score 95/100 (High Priority ICP): Monolithic auth bottleneck verified; direct match for Custom SaaS multi-tenant architecture; technical contact channel available.",
+    "status": "new",
+    "createdAt": "2026-10-10T03:31:45.883079+00:00",
+    "company": "Strata Cloud Solutions",
+    "source": "AI Discovery",
+    "country": "USA",
+    "sourceUrl": "https://stratacloud.io",
+    "qualificationScore": 95,
+    "observations": [
+      "Customer dashboard uses monolithic PHP session cookies without RESTful tenant tokenization.",
+      "Public pricing tiers lack automated self-serve billing checkout and webhook entitlement sync.",
+      "API documentation indicates manual provisioning rather than multi-tenant automated provisioning."
+    ]
+  },
+  {
     "id": "91240dfa-31d7-482b-b1f5-50937eae17f9",
     "name": "Commercial Desk",
     "email": "info@truebays.com",
@@ -182,23 +201,15 @@
     ]
   },
   {
-    "id": "41a30e7a-9585-4453-90e6-a218eb44f85b",
-    "name": "Operations Team",
-    "email": "info@freightsourcelogistics.com",
-    "subject": "Freight Source Logistics (Lead)",
-    "message": "Score 90/100 (High Priority ICP): Unrouted booking form without CRM integration; exact match for automated pipeline routing; public corporate channel verified.",
+    "id": "90c29670-6a8c-44f5-81e8-58a47acafb15",
+    "name": "Alex Turner",
+    "email": "alex.turner@apexcloud.io",
+    "subject": "Apex Cloud (Lead)",
+    "message": "Requested infrastructure demo via website form",
     "status": "new",
-    "createdAt": "2026-10-10T03:31:45.883079+00:00",
-    "company": "Freight Source Logistics",
-    "source": "AI Discovery",
-    "country": "UK",
-    "sourceUrl": "https://freightsourcelogistics.com/contact",
-    "qualificationScore": 90,
-    "observations": [
-      "Multi-tier freight dispatch booking form submits to static inbox queue without CRM webhook automation.",
-      "No automated lead routing or SLA deal progression detected across international freight quotes.",
-      "Inquiry workflow lacks webhook-driven qualification and customer portal synchronization."
-    ]
+    "createdAt": "2026-10-08T18:56:00.586275+00:00",
+    "company": "Apex Cloud",
+    "source": "CRM Import"
   },
   {
     "id": "d122dab6-c5f6-454e-90f5-56464cc1117f",
@@ -220,17 +231,6 @@
     "status": "new",
     "createdAt": "2026-10-08T18:56:00.586275+00:00",
     "company": "Nova Technologies",
-    "source": "CRM Import"
-  },
-  {
-    "id": "90c29670-6a8c-44f5-81e8-58a47acafb15",
-    "name": "Alex Turner",
-    "email": "alex.turner@apexcloud.io",
-    "subject": "Apex Cloud (Lead)",
-    "message": "Requested infrastructure demo via website form",
-    "status": "new",
-    "createdAt": "2026-10-08T18:56:00.586275+00:00",
-    "company": "Apex Cloud",
     "source": "CRM Import"
   },
   {

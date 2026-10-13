@@ -56,6 +56,43 @@ async function writeJson<T>(filePath: string, data: T): Promise<boolean> {
   }
 }
 
+/**
+ * Safe Supabase Storage JSON reader (globally persistent across Vercel serverless)
+ */
+async function readStorageJson<T>(fileName: string): Promise<T | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.storage.from("uploads").download(`store/${fileName}`);
+    if (!error && data) {
+      const text = await data.text();
+      return JSON.parse(text) as T;
+    }
+  } catch (err) {
+    console.warn(`[dataStore] Storage download warning for store/${fileName}:`, err);
+  }
+  return null;
+}
+
+/**
+ * Safe Supabase Storage JSON writer (globally persistent across Vercel serverless)
+ */
+async function writeStorageJson<T>(fileName: string, data: T): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.storage.from("uploads").upload(`store/${fileName}`, JSON.stringify(data, null, 2), {
+      upsert: true,
+      contentType: "application/json",
+    });
+    if (!error) return true;
+    console.warn(`[dataStore] Storage upload warning for store/${fileName}:`, error);
+  } catch (err) {
+    console.warn(`[dataStore] Storage upload exception for store/${fileName}:`, err);
+  }
+  return false;
+}
+
 function formatTeamTs(teamList: TeamMember[]): string {
   return `export interface TeamMember {
   name: string;
@@ -77,37 +114,17 @@ export const teamMembers: TeamMember[] = ${JSON.stringify(teamList, null, 2)};
 }
 
 // ==================== TEAM ====================
-export async function getTeamMembers(): Promise<TeamMember[]> {
+export async function getTeamMembers(forceRefresh: boolean = false): Promise<TeamMember[]> {
   // 1. In-memory cache
-  if (memoryTeamCache && Array.isArray(memoryTeamCache) && memoryTeamCache.length > 0) {
+  if (!forceRefresh && memoryTeamCache && Array.isArray(memoryTeamCache) && memoryTeamCache.length > 0) {
     return memoryTeamCache;
   }
 
-  // 2. Supabase if configured
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("team")
-        .select("*")
-        .order("sort_order", { ascending: true });
-      if (!error && data && data.length > 0) {
-        const teamFromDb: TeamMember[] = data.map((row: any) => ({
-          name: row.name,
-          role: row.role,
-          description: row.description || "",
-          initials: row.initials || undefined,
-          image: row.image || undefined,
-          imagePosition: row.image_position || undefined,
-          imageScale: row.image_scale || undefined,
-          linkedin: row.linkedin || undefined,
-        }));
-        memoryTeamCache = teamFromDb;
-        return teamFromDb;
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase team query failed:", err);
-    }
+  // 2. Supabase Storage (store/team.json)
+  const storageTeam = await readStorageJson<TeamMember[]>("team.json");
+  if (storageTeam && Array.isArray(storageTeam) && storageTeam.length > 0) {
+    memoryTeamCache = storageTeam;
+    return storageTeam;
   }
 
   // 3. Writable tmp runtime cache (Vercel)
@@ -133,37 +150,10 @@ export async function saveTeamMembers(members: TeamMember[]): Promise<boolean> {
   // Always update in-memory cache immediately
   memoryTeamCache = [...members];
 
-  let supabaseSaved = false;
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const rows = members.map((m, idx) => ({
-        id: `team_${idx + 1}_${m.name.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 40)}`,
-        name: m.name,
-        role: m.role,
-        description: m.description || "",
-        initials: m.initials || null,
-        image: m.image || null,
-        image_position: m.imagePosition || null,
-        image_scale: m.imageScale || null,
-        linkedin: m.linkedin || null,
-        sort_order: idx,
-        updated_at: new Date().toISOString(),
-      }));
+  // 1. Persist to Supabase Storage (persists globally across all Vercel serverless containers)
+  const storageSaved = await writeStorageJson("team.json", members);
 
-      const { error: delError } = await supabase.from("team").delete().neq("id", "___none___");
-      if (!delError) {
-        const { error: insError } = await supabase.from("team").insert(rows);
-        if (!insError) {
-          supabaseSaved = true;
-        }
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase team sync warning:", err);
-    }
-  }
-
-  // Write to local project repo (works in local dev & writable servers)
+  // 2. Write to local project repo (works in local dev & writable servers)
   let fsSaved = false;
   try {
     fsSaved = await writeJson(TEAM_FILE, members);
@@ -174,14 +164,13 @@ export async function saveTeamMembers(members: TeamMember[]): Promise<boolean> {
     }
   } catch {}
 
-  // Write to OS temp storage (persists across warm requests on serverless)
+  // 3. Write to OS temp storage (persists across warm requests on serverless)
   let tmpSaved = false;
   try {
     tmpSaved = await writeJson(TMP_TEAM_FILE, members);
   } catch {}
 
-  // Always consider saved if updated in memory / tmp / fs / Supabase
-  return supabaseSaved || fsSaved || tmpSaved || true;
+  return storageSaved || fsSaved || tmpSaved || true;
 }
 
 function formatProductsTs(productsList: Product[]): string {
@@ -227,44 +216,26 @@ export const products: Product[] = ${JSON.stringify(productsList, null, 2)};
 }
 
 // ==================== PRODUCTS ====================
-export async function getProducts(): Promise<Product[]> {
-  if (memoryProductsCache && Array.isArray(memoryProductsCache) && memoryProductsCache.length > 0) {
+export async function getProducts(forceRefresh: boolean = false): Promise<Product[]> {
+  if (!forceRefresh && memoryProductsCache && Array.isArray(memoryProductsCache) && memoryProductsCache.length > 0) {
     return memoryProductsCache;
   }
 
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: true });
-      if (!error && data && data.length > 0) {
-        const mapped: Product[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          logo: row.logo,
-          badge: row.badge,
-          category: row.category,
-          headline: Array.isArray(row.headline) ? row.headline : [row.name],
-          accentLine: row.accent_line ?? 1,
-          description: row.description || "",
-          cta: row.cta || "Learn More",
-          stats: Array.isArray(row.stats) ? row.stats : [],
-          accent: row.accent || "cyan",
-          href: row.href || "",
-        }));
-        memoryProductsCache = mapped;
-        return mapped;
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase products query warning:", err);
-    }
+  // 1. Supabase Storage (store/products.json)
+  const storageProducts = await readStorageJson<Product[]>("products.json");
+  if (storageProducts && Array.isArray(storageProducts) && storageProducts.length > 0) {
+    memoryProductsCache = storageProducts;
+    return storageProducts;
   }
 
+  // 2. Writable tmp runtime cache
   const tmpProducts = await readJson<Product[] | null>(TMP_PRODUCTS_FILE, null);
   if (tmpProducts && Array.isArray(tmpProducts) && tmpProducts.length > 0) {
     memoryProductsCache = tmpProducts;
     return tmpProducts;
   }
 
+  // 3. Local repo file
   const stored = await readJson<Product[] | null>(PRODUCTS_FILE, null);
   if (stored && Array.isArray(stored) && stored.length > 0) {
     memoryProductsCache = stored;
@@ -278,38 +249,10 @@ export async function getProducts(): Promise<Product[]> {
 export async function saveProducts(products: Product[]): Promise<boolean> {
   memoryProductsCache = [...products];
 
-  let supabaseSaved = false;
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const rows = products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        logo: p.logo,
-        badge: p.badge,
-        category: p.category,
-        headline: p.headline,
-        accent_line: p.accentLine,
-        description: p.description,
-        cta: p.cta,
-        stats: p.stats,
-        accent: p.accent,
-        href: p.href,
-        updated_at: new Date().toISOString(),
-      }));
+  // 1. Supabase Storage (store/products.json)
+  const storageSaved = await writeStorageJson("products.json", products);
 
-      const { error: delError } = await supabase.from("products").delete().neq("id", "___none___");
-      if (!delError) {
-        const { error: insError } = await supabase.from("products").insert(rows);
-        if (!insError) {
-          supabaseSaved = true;
-        }
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase products sync warning:", err);
-    }
-  }
-
+  // 2. Local repo file
   let fsSaved = false;
   try {
     fsSaved = await writeJson(PRODUCTS_FILE, products);
@@ -320,12 +263,13 @@ export async function saveProducts(products: Product[]): Promise<boolean> {
     }
   } catch {}
 
+  // 3. Writable tmp runtime cache
   let tmpSaved = false;
   try {
     tmpSaved = await writeJson(TMP_PRODUCTS_FILE, products);
   } catch {}
 
-  return supabaseSaved || fsSaved || tmpSaved || true;
+  return storageSaved || fsSaved || tmpSaved || true;
 }
 
 // ==================== PROJECTS ====================
@@ -342,42 +286,26 @@ export interface StoredProject {
   isProduct: boolean;
 }
 
-export async function getProjects(): Promise<StoredProject[]> {
-  if (memoryProjectsCache && Array.isArray(memoryProjectsCache) && memoryProjectsCache.length > 0) {
+export async function getProjects(forceRefresh: boolean = false): Promise<StoredProject[]> {
+  if (!forceRefresh && memoryProjectsCache && Array.isArray(memoryProjectsCache) && memoryProjectsCache.length > 0) {
     return memoryProjectsCache;
   }
 
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: true });
-      if (!error && data && data.length > 0) {
-        const mapped: StoredProject[] = data.map((row: any) => ({
-          id: row.id,
-          title: row.title,
-          category: row.category,
-          categoryLabel: row.category_label || undefined,
-          description: row.description || "",
-          logo: row.logo,
-          href: row.href,
-          cta: row.cta || "Explore Platform",
-          iconName: row.icon_name || undefined,
-          isProduct: row.is_product ?? true,
-        }));
-        memoryProjectsCache = mapped;
-        return mapped;
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase projects query warning:", err);
-    }
+  // 1. Supabase Storage (store/projects.json)
+  const storageProjects = await readStorageJson<StoredProject[]>("projects.json");
+  if (storageProjects && Array.isArray(storageProjects) && storageProjects.length > 0) {
+    memoryProjectsCache = storageProjects;
+    return storageProjects;
   }
 
+  // 2. Writable tmp runtime cache
   const tmpProjects = await readJson<StoredProject[] | null>(TMP_PROJECTS_FILE, null);
   if (tmpProjects && Array.isArray(tmpProjects) && tmpProjects.length > 0) {
     memoryProjectsCache = tmpProjects;
     return tmpProjects;
   }
 
+  // 3. Local repo fallback
   const fallback = defaultProjects.map((p) => ({
     id: p.id,
     title: p.title,
@@ -398,47 +326,22 @@ export async function getProjects(): Promise<StoredProject[]> {
 export async function saveProjects(projects: StoredProject[]): Promise<boolean> {
   memoryProjectsCache = [...projects];
 
-  let supabaseSaved = false;
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      const rows = projects.map((p) => ({
-        id: p.id,
-        title: p.title,
-        category: p.category,
-        category_label: p.categoryLabel || null,
-        description: p.description,
-        logo: p.logo,
-        href: p.href,
-        cta: p.cta,
-        icon_name: p.iconName || null,
-        is_product: p.isProduct,
-        updated_at: new Date().toISOString(),
-      }));
+  // 1. Supabase Storage (store/projects.json)
+  const storageSaved = await writeStorageJson("projects.json", projects);
 
-      const { error: delError } = await supabase.from("projects").delete().neq("id", "___none___");
-      if (!delError) {
-        const { error: insError } = await supabase.from("projects").insert(rows);
-        if (!insError) {
-          supabaseSaved = true;
-        }
-      }
-    } catch (err) {
-      console.warn("[dataStore] Supabase projects sync warning:", err);
-    }
-  }
-
+  // 2. Local repo file
   let fsSaved = false;
   try {
     fsSaved = await writeJson(PROJECTS_FILE, projects);
   } catch {}
 
+  // 3. Writable tmp runtime cache
   let tmpSaved = false;
   try {
     tmpSaved = await writeJson(TMP_PROJECTS_FILE, projects);
   } catch {}
 
-  return supabaseSaved || fsSaved || tmpSaved || true;
+  return storageSaved || fsSaved || tmpSaved || true;
 }
 
 // ==================== SETTINGS ====================
@@ -456,17 +359,26 @@ const defaultSettings: SiteSettings = {
   tagline: "Software, SaaS & Digital Solutions",
 };
 
-export async function getSiteSettings(): Promise<SiteSettings> {
-  if (memorySettingsCache) {
+export async function getSiteSettings(forceRefresh: boolean = false): Promise<SiteSettings> {
+  if (!forceRefresh && memorySettingsCache) {
     return memorySettingsCache;
   }
 
+  // 1. Supabase Storage (store/settings.json)
+  const storageSettings = await readStorageJson<SiteSettings>("settings.json");
+  if (storageSettings && typeof storageSettings === "object" && storageSettings.siteName) {
+    memorySettingsCache = storageSettings;
+    return storageSettings;
+  }
+
+  // 2. Writable tmp runtime cache
   const tmpSettings = await readJson<SiteSettings | null>(TMP_SETTINGS_FILE, null);
   if (tmpSettings && typeof tmpSettings === "object" && tmpSettings.siteName) {
     memorySettingsCache = tmpSettings;
     return tmpSettings;
   }
 
+  // 3. Local repo file
   const stored = await readJson<SiteSettings>(SETTINGS_FILE, defaultSettings);
   memorySettingsCache = stored;
   return stored;
@@ -475,17 +387,22 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 export async function saveSiteSettings(settings: SiteSettings): Promise<boolean> {
   memorySettingsCache = { ...settings };
 
+  // 1. Supabase Storage (store/settings.json)
+  const storageSaved = await writeStorageJson("settings.json", settings);
+
+  // 2. Local repo file
   let fsSaved = false;
   try {
     fsSaved = await writeJson(SETTINGS_FILE, settings);
   } catch {}
 
+  // 3. Writable tmp runtime cache
   let tmpSaved = false;
   try {
     tmpSaved = await writeJson(TMP_SETTINGS_FILE, settings);
   } catch {}
 
-  return fsSaved || tmpSaved || true;
+  return storageSaved || fsSaved || tmpSaved || true;
 }
 
 // ==================== INQUIRIES & LEADS ====================

@@ -57,7 +57,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
-  const team = await getTeamMembers();
+  const team = await getTeamMembers(true);
   return NextResponse.json(
     { success: true, team },
     {

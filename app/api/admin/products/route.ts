@@ -89,13 +89,20 @@ function normalizeProduct(raw: z.infer<typeof ProductInputSchema>, existingList:
   };
 }
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
-  const products = await getProducts();
+  const products = await getProducts(true);
   return NextResponse.json(
     { success: true, products },
     {
       status: 200,
-      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
     }
   );
 }
