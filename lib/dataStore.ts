@@ -79,13 +79,31 @@ async function readStorageJson<T>(fileName: string): Promise<T | null> {
  */
 async function writeStorageJson<T>(fileName: string, data: T): Promise<boolean> {
   const supabase = getSupabaseClient();
-  if (!supabase) return false;
+  if (!supabase) {
+    console.warn(`[dataStore] Supabase client unavailable for store/${fileName}`);
+    return false;
+  }
   try {
-    const { error } = await supabase.storage.from("uploads").upload(`store/${fileName}`, JSON.stringify(data, null, 2), {
+    const payload = JSON.stringify(data, null, 2);
+    const { error } = await supabase.storage.from("uploads").upload(`store/${fileName}`, payload, {
       upsert: true,
       contentType: "application/json",
     });
     if (!error) return true;
+
+    // If bucket was not found, auto-create public bucket 'uploads' and retry once
+    const errMessage = (error as any)?.message || "";
+    if (errMessage.toLowerCase().includes("bucket") || (error as any)?.statusCode === "404") {
+      try {
+        await supabase.storage.createBucket("uploads", { public: true });
+        const retry = await supabase.storage.from("uploads").upload(`store/${fileName}`, payload, {
+          upsert: true,
+          contentType: "application/json",
+        });
+        if (!retry.error) return true;
+      } catch {}
+    }
+
     console.warn(`[dataStore] Storage upload warning for store/${fileName}:`, error);
   } catch (err) {
     console.warn(`[dataStore] Storage upload exception for store/${fileName}:`, err);

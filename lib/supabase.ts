@@ -1,13 +1,15 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
-const SUPABASE_URL =
+const rawSupabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  "https://mainycklwbqcdhwqmneq.supabase.co";
-const SUPABASE_SERVICE_KEY =
+  "https://rbwkyueslfmvuhborahn.supabase.co";
+const SUPABASE_URL = rawSupabaseUrl ? rawSupabaseUrl.trim().replace(/\/+$/, "") : "";
+const SUPABASE_SERVICE_KEY = (
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1haW55Y2tsd2JxY2Rod3FtbmVxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTQ3NjY0NiwiZXhwIjoyMTA3MDUyNjQ2fQ.GXgQw_gvuIZUnYQ-GCvYybC62PPt5oPE__zwmM66vhk";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJid2t5dWVzbGZtdnVoYm9yYWhuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk3ODM4MiwiZXhwIjoyMTA3NTU0MzgyfQ.Bu_HctT-Keon71MrRbbPepPtVTCTgeC4Zc5zJPa_ncI"
+)?.trim();
 
 // Singleton client instance for server-side operations
 let supabaseServerClient: SupabaseClient | null = null;

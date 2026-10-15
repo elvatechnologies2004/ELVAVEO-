@@ -20,7 +20,7 @@ export const metadata: Metadata = createPageMetadata({
 });
 
 export default async function ProductsPage() {
-  const currentProducts = await getProducts();
+  const currentProducts = await getProducts(true);
 
   return (
     <>

@@ -190,7 +190,7 @@ const capabilities: { icon: LucideIcon; title: string; description: string }[] =
 ];
 
 export default async function AboutPage() {
-  const members = await getTeamMembers();
+  const members = await getTeamMembers(true);
   return (
     <>
       <Navbar />
