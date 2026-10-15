@@ -20,6 +20,8 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
   Move,
 } from "lucide-react";
 import Link from "next/link";
@@ -150,11 +152,18 @@ export default function AdminTeam() {
     }
   };
 
-  // Drag and Drop reordering handlers
+  // Robust Drag and Drop reordering handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", index.toString());
+  };
+
+  const handleDragEnter = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -165,27 +174,46 @@ export default function AdminTeam() {
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, index: number) => {
-    if (dragOverIdx === index) {
-      setDragOverIdx(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    const currentTarget = e.currentTarget;
+    const related = e.relatedTarget as Node | null;
+    if (currentTarget && related && currentTarget.contains(related)) {
+      return;
     }
+    setDragOverIdx(null);
   };
 
   const handleDrop = async (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOverIdx(null);
 
-    if (draggedIdx === null || draggedIdx === targetIndex) {
-      setDraggedIdx(null);
+    // Retrieve source index from React state or dataTransfer fallback
+    let sourceIndex = draggedIdx;
+    if (sourceIndex === null) {
+      const dataStr = e.dataTransfer.getData("text/plain");
+      if (dataStr) {
+        const parsed = parseInt(dataStr, 10);
+        if (!isNaN(parsed)) sourceIndex = parsed;
+      }
+    }
+
+    setDraggedIdx(null);
+
+    if (
+      sourceIndex === null ||
+      sourceIndex === targetIndex ||
+      sourceIndex < 0 ||
+      sourceIndex >= members.length
+    ) {
       return;
     }
 
     const updated = [...members];
-    const [draggedMember] = updated.splice(draggedIdx, 1);
+    const [draggedMember] = updated.splice(sourceIndex, 1);
     updated.splice(targetIndex, 0, draggedMember);
 
     setMembers(updated);
-    setDraggedIdx(null);
 
     await persistTeam(
       updated,
@@ -210,6 +238,20 @@ export default function AdminTeam() {
     await persistTeam(
       updated,
       `Reordered sequence! Moved ${member.name} to position #${targetIndex + 1}. Saved live.`
+    );
+  };
+
+  const moveToPosition = async (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= members.length || fromIndex === toIndex) return;
+
+    const updated = [...members];
+    const [member] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, member);
+
+    setMembers(updated);
+    await persistTeam(
+      updated,
+      `Reordered sequence! Moved ${member.name} to position #${toIndex + 1}. Saved live.`
     );
   };
 
@@ -466,11 +508,12 @@ export default function AdminTeam() {
       <div className="grid gap-6 lg:grid-cols-2">
         {members.map((member, idx) => (
           <div
-            key={member.name + idx}
+            key={member.name + "-" + (member.linkedin || member.role || "")}
             draggable={!isSaving}
             onDragStart={(e) => handleDragStart(e, idx)}
+            onDragEnter={(e) => handleDragEnter(e, idx)}
             onDragOver={(e) => handleDragOver(e, idx)}
-            onDragLeave={(e) => handleDragLeave(e, idx)}
+            onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, idx)}
             onDragEnd={handleDragEnd}
             className={`relative group rounded-[28px] transition-all duration-200 ${
@@ -481,47 +524,84 @@ export default function AdminTeam() {
                 : ""
             }`}
           >
-            {/* Top Sequence & Drag Reorder Bar */}
-            <div className="mb-2.5 flex items-center justify-between rounded-xl bg-white/70 backdrop-blur-sm border border-blue/15 px-3 py-1.5 shadow-xs">
+            {/* Top Sequence & Reorder Controls Bar */}
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 backdrop-blur-sm border border-blue/15 px-3 py-2 shadow-xs select-none">
               <div className="flex items-center gap-2">
-                {/* Sequence position badge */}
-                <span className="flex items-center gap-1 rounded-full bg-blue/10 px-2 py-0.5 text-[11px] font-extrabold text-blue">
-                  <span>#{idx + 1}</span>
-                  {idx === 0 && <span className="text-[9px] uppercase font-bold text-violet">(First)</span>}
-                </span>
-
                 {/* Drag handle */}
                 <div
-                  className="flex items-center gap-1 cursor-grab active:cursor-grabbing rounded-lg bg-white border border-blue/15 px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-blue hover:border-blue/30 shadow-2xs transition-colors"
-                  title="Drag and drop to reorder member position"
+                  className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing rounded-lg bg-blue/10 border border-blue/25 px-2.5 py-1 text-[11px] font-bold text-blue hover:bg-blue hover:text-white shadow-2xs transition-colors"
+                  title="Click and drag card to reorder position"
                 >
-                  <GripVertical size={13} className="text-blue shrink-0" />
-                  <span className="text-[11px]">Drag to reorder</span>
+                  <GripVertical size={14} className="shrink-0" />
+                  <span className="hidden sm:inline">Drag to reorder</span>
+                </div>
+
+                {/* Direct Position Dropdown */}
+                <div className="flex items-center gap-1 text-[11px] font-bold text-navy bg-white rounded-lg border border-blue/15 px-2 py-0.5 shadow-2xs">
+                  <span className="text-muted text-[10px] uppercase font-bold">Pos:</span>
+                  <select
+                    value={idx + 1}
+                    disabled={isSaving}
+                    onChange={(e) => moveToPosition(idx, parseInt(e.target.value, 10) - 1)}
+                    className="font-black text-blue focus:outline-none cursor-pointer bg-transparent py-0.5"
+                    title="Change order position directly"
+                  >
+                    {members.map((_, pIdx) => (
+                      <option key={pIdx} value={pIdx + 1}>
+                        #{pIdx + 1} {pIdx === 0 ? "(First)" : pIdx === members.length - 1 ? "(Last)" : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Action buttons: Move Up, Move Down, Edit, Delete */}
+              {/* Action buttons: Move to Top, Move Up, Move Down, Move to Bottom, Edit, Delete */}
               <div className="flex items-center gap-1">
+                {/* Move to Top */}
+                <button
+                  type="button"
+                  disabled={idx === 0 || isSaving}
+                  onClick={() => moveToPosition(idx, 0)}
+                  title="Move to First position (#1)"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                >
+                  <ChevronsUp size={13} />
+                </button>
+
+                {/* Move Up */}
                 <button
                   type="button"
                   disabled={idx === 0 || isSaving}
                   onClick={() => moveMember(idx, "up")}
-                  title="Move member up / left in sequence"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                  title="Move Up one place"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
                 >
                   <ArrowUp size={12} />
                 </button>
 
+                {/* Move Down */}
                 <button
                   type="button"
                   disabled={idx === members.length - 1 || isSaving}
                   onClick={() => moveMember(idx, "down")}
-                  title="Move member down / right in sequence"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                  title="Move Down one place"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
                 >
                   <ArrowDown size={12} />
                 </button>
 
+                {/* Move to Bottom */}
+                <button
+                  type="button"
+                  disabled={idx === members.length - 1 || isSaving}
+                  onClick={() => moveToPosition(idx, members.length - 1)}
+                  title="Move to Last position"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-blue/15 bg-white text-navy hover:bg-blue hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-navy transition-colors cursor-pointer"
+                >
+                  <ChevronsDown size={13} />
+                </button>
+
+                {/* Edit */}
                 <button
                   type="button"
                   onClick={() => openEditModal(member, idx)}
@@ -531,6 +611,7 @@ export default function AdminTeam() {
                   <Edit2 size={12} />
                 </button>
 
+                {/* Delete */}
                 {members.length > 1 && (
                   <button
                     type="button"
@@ -544,8 +625,17 @@ export default function AdminTeam() {
               </div>
             </div>
 
-            {/* Live rendered LeadershipCard */}
-            <LeadershipCard variant="person" {...member} />
+            {/* Drop Indicator Banner if hovered during drag */}
+            {dragOverIdx === idx && draggedIdx !== idx && (
+              <div className="mb-2 flex items-center justify-center gap-1.5 rounded-xl bg-blue/15 border border-dashed border-blue py-1.5 text-xs font-bold text-blue animate-pulse">
+                <span>Drop here to place at Position #{idx + 1}</span>
+              </div>
+            )}
+
+            {/* Live rendered LeadershipCard wrapped with pointer-events guard during drag */}
+            <div className={draggedIdx !== null ? "pointer-events-none select-none opacity-85" : ""}>
+              <LeadershipCard variant="person" {...member} />
+            </div>
           </div>
         ))}
       </div>
