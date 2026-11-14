@@ -71,6 +71,8 @@ copy .env.example .env.local      # Windows PowerShell
 | `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Supabase project URL. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Public Supabase key; database RLS limits policy reads to the current published version. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Server-only key for admin verification and database mutations. Never expose it to browser code. |
+| `META_APP_SECRET` | **Yes** | Meta App Secret from Meta for Developers. Used to verify HMAC-SHA256 signatures for Meta Data Deletion callbacks. Never expose to client. |
+| `META_APP_ID` | No | Meta App ID for ELVAVEO Social Media Manager. |
 
 `.env.local` is gitignored. Only `.env.example` is committed.
 
@@ -85,6 +87,21 @@ Set on Vercel:
 - `RESEND_API_KEY`: Production Resend API Key (`re_...`)
 - `RESEND_FROM_EMAIL`: `"ELVAVEO Website <notifications@notify.elvaveo.com>"`
 - `CONTACT_EMAIL`: `hello@elvaveo.com`
+- `META_APP_SECRET`: Meta App Secret for signed request verification
+
+### Meta Data Deletion Callback (Social Media Manager)
+
+In compliance with Meta Platform Terms, ELVAVEO implements the User Data Deletion Callback at `/api/meta/data-deletion`:
+- **POST `/api/meta/data-deletion`**: Receives Meta's `signed_request`, validates the HMAC-SHA256 signature using `META_APP_SECRET`, securely deletes user data for ELVAVEO Social Media Manager (while strictly preserving core ELVAVEO user and admin data), and returns Meta's required JSON response:
+  ```json
+  {
+    "url": "https://elvaveo.com/api/meta/data-deletion?code=meta_del_...",
+    "confirmation_code": "meta_del_..."
+  }
+  ```
+- **GET `/api/meta/data-deletion?code=<confirmation_code>`**: Allows users and Meta compliance reviewers to verify the deletion status. Returns a branded status UI in browsers and structured JSON to API clients.
+- **Idempotency**: Retried requests for the same Meta `user_id` return the existing confirmation code without duplicate processing.
+- **Automated Tests**: Run with `npm test`.
 
 ---
 
@@ -104,6 +121,7 @@ Set on Vercel:
 | `/api/contact` | `POST` only — sends email via Resend |
 | `/api/admin/auth` | Administrator login and session status |
 | `/api/admin/privacy-policy` | Admin-only policy draft and version operations |
+| `/api/meta/data-deletion` | `POST` Meta data deletion callback; `GET` confirmation status |
 | `/sitemap.xml` | Generated from `lib/constants.ts` |
 | `/robots.txt` | Generated |
 | `*` | Branded 404 (`app/not-found.tsx`) |

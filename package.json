@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types tests/meta-data-deletion.test.mjs"
   },
   "dependencies": {
     "@fortawesome/free-brands-svg-icons": "^7.3.1",
