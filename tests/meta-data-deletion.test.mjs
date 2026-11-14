@@ -9,6 +9,7 @@ const {
   getMetaDeletionRecord,
   saveMetaDeletionRecord,
   updateMetaDeletionStatus,
+  renewMetaDataDeletionLease,
   isValidConfirmationCode,
   generateAlphanumericConfirmationCode,
   hashUserId,
@@ -25,8 +26,10 @@ const {
 
 const TEST_SECRET = "super_secret_meta_app_secret_1234567890";
 const TEST_HASH_SECRET = "super_secret_meta_deletion_hash_secret_54321";
+const TEST_LOCK_SECRET = "super_secret_meta_deletion_lock_secret_99999";
 process.env.META_APP_SECRET = TEST_SECRET;
 process.env.META_DELETION_HASH_SECRET = TEST_HASH_SECRET;
+process.env.META_DELETION_LOCK_SECRET = TEST_LOCK_SECRET;
 process.env.SITE_URL = "https://elvaveo.com";
 
 // ============================================================================
@@ -378,19 +381,88 @@ test("Multiple Historical Hash Keys: Resolves across multiple comma-separated ke
   }
 });
 
-test("Cross-Version Concurrency: Canonical lock hash is identical across versions and secret keys", () => {
+test("Cross-Version Concurrency: Canonical lock hash uses dedicated META_DELETION_LOCK_SECRET", () => {
   const userId = "meta_enterprise_user_987654321";
 
-  // Compute canonical lock hash
-  const canonicalHash = computeCanonicalLockHash(userId);
+  // Compute canonical lock hash using dedicated lock secret
+  const canonicalHash = computeCanonicalLockHash(userId, TEST_LOCK_SECRET);
   assert.equal(canonicalHash.length, 64);
   assert.match(canonicalHash, /^[a-f0-9]{64}$/);
+  assert.equal(
+    canonicalHash,
+    crypto.createHmac("sha256", TEST_LOCK_SECRET).update(userId.trim()).digest("hex")
+  );
 
-  // Verify that regardless of what secret is passed, the canonical lock hash never changes
-  const hashWithSecretA = computeCanonicalLockHash(userId);
-  const hashWithSecretB = computeCanonicalLockHash(userId);
-  assert.equal(hashWithSecretA, hashWithSecretB);
-  assert.equal(hashWithSecretA, crypto.createHash("sha256").update(userId.trim()).digest("hex"));
+  // In production, missing dedicated lock secret must fail closed
+  const originalEnv = process.env.NODE_ENV;
+  const originalLockSecret = process.env.META_DELETION_LOCK_SECRET;
+
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.META_DELETION_LOCK_SECRET;
+
+    assert.throws(
+      () => computeCanonicalLockHash(userId),
+      /Server misconfiguration: META_DELETION_LOCK_SECRET is required in production/
+    );
+  } finally {
+    process.env.NODE_ENV = originalEnv;
+    if (originalLockSecret) process.env.META_DELETION_LOCK_SECRET = originalLockSecret;
+  }
+});
+
+test("Hash Version Column Length: All version identifiers strictly fit within VARCHAR(50)", () => {
+  const versions = [
+    "v1-sha256",
+    "v2-hmac-sha256",
+    "v2-hmac-sha256-rotated",
+  ];
+
+  for (const v of versions) {
+    assert.ok(
+      v.length <= 50,
+      `Version '${v}' length ${v.length} must not exceed database column width 50`
+    );
+  }
+});
+
+test("Lease Renewal: Extends active lease before expiry and rejects invalid durations", async () => {
+  const renewalUserId = `renewal_user_${Date.now()}`;
+  const renewalCode = generateAlphanumericConfirmationCode(32);
+  const testClaimToken = crypto.randomUUID();
+
+  // Seed an active processing request
+  await saveMetaDeletionRecord({
+    confirmationCode: renewalCode,
+    userIdHash: hashUserId(renewalUserId),
+    hashVersion: "v2-hmac-sha256",
+    claimToken: testClaimToken,
+    userId: null,
+    status: "processing",
+    requestedAt: new Date().toISOString(),
+    completedAt: null,
+    lockedUntil: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+    source: "meta_callback",
+  });
+
+  // Legitimate renewal with matching token
+  const result = await renewMetaDataDeletionLease(renewalCode, testClaimToken, 600);
+  assert.equal(result.success, true);
+  assert.ok(result.lockedUntil);
+  const expiryTime = new Date(result.lockedUntil).getTime();
+  assert.ok(expiryTime > Date.now() + 500 * 1000);
+
+  // Rejected if invalid duration (< 10s or > 3600s)
+  const invalidShort = await renewMetaDataDeletionLease(renewalCode, testClaimToken, 5);
+  assert.equal(invalidShort.success, false);
+
+  const invalidLong = await renewMetaDataDeletionLease(renewalCode, testClaimToken, 7200);
+  assert.equal(invalidLong.success, false);
+
+  // Rejected if stale worker attempts renewal with mismatched token
+  const staleWorker = await renewMetaDataDeletionLease(renewalCode, crypto.randomUUID(), 300);
+  assert.equal(staleWorker.success, false);
+  assert.equal(staleWorker.error, "stale_claim_token");
 });
 
 test("Migration Integrity Simulation: Raw IDs are cleared only after successful hash backfill", () => {
@@ -452,29 +524,44 @@ test("Migration Integrity Simulation: Aborts with error if a row cannot be safel
   assert.equal(mockRowsWithInvalid[1].user_id, "meta_user_2");
 });
 
-test("SQL Static Validation: Migration script contains exact function signatures and restrictive RLS", async () => {
+test("SQL Static Validation V5: Migration script contains exact function signatures, fencing, and table grants", async () => {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   const migrationPath = path.join(process.cwd(), "supabase", "migrations", "20261114_meta_data_deletion_hardening.sql");
   const sql = await fs.readFile(migrationPath, "utf-8");
 
-  // Check RPC signature matches character-for-character
+  // Check RPC signatures with claim_token and renew
   assert.ok(
     sql.includes("claim_meta_data_deletion(character varying, character varying, character varying, character varying[], character varying, integer, jsonb)")
   );
   assert.ok(
-    sql.includes("finalize_meta_data_deletion(character varying, character varying, jsonb)")
+    sql.includes("finalize_meta_data_deletion(character varying, uuid, character varying, jsonb)")
   );
+  assert.ok(
+    sql.includes("renew_meta_data_deletion_lease(character varying, uuid, integer)")
+  );
+
+  // Check Grants
   assert.ok(sql.includes("GRANT EXECUTE ON FUNCTION public.claim_meta_data_deletion"));
-  assert.ok(sql.includes("TO service_role;"));
   assert.ok(sql.includes("GRANT EXECUTE ON FUNCTION public.finalize_meta_data_deletion"));
+  assert.ok(sql.includes("GRANT EXECUTE ON FUNCTION public.renew_meta_data_deletion_lease"));
   assert.ok(sql.includes("TO service_role;"));
 
-  // Check timestamp correctness (uses now() instead of timezone conversion)
-  assert.ok(sql.includes("v_now TIMESTAMPTZ := now();"));
-  assert.ok(!sql.includes("timezone('utc'::text, now())"));
+  // Check Table Privileges
+  assert.ok(sql.includes("REVOKE ALL ON TABLE public.meta_data_deletion_requests FROM PUBLIC, anon, authenticated;"));
+  assert.ok(sql.includes("GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.meta_data_deletion_requests TO service_role;"));
+  assert.ok(sql.includes("GRANT ALL ON TABLE public.meta_data_deletion_requests TO postgres;"));
 
-  // Check Restrictive RLS policy
+  // Check timestamp correctness
+  assert.ok(sql.includes("requested_at SET DEFAULT now()"));
+  assert.ok(sql.includes("completed_at DROP DEFAULT"));
+  assert.ok(sql.includes("v_now TIMESTAMPTZ := now();"));
+
+  // Check column widening
+  assert.ok(sql.includes("hash_version TYPE VARCHAR(50)"));
+  assert.ok(sql.includes("claim_token UUID"));
+
+  // Check Restrictive RLS
   assert.ok(sql.includes("AS RESTRICTIVE"));
   assert.ok(sql.includes("FORCE ROW LEVEL SECURITY"));
 

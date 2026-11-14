@@ -17,6 +17,7 @@ export interface MetaDeletionRecord {
   confirmationCode: string;
   userIdHash: string;
   hashVersion?: string;
+  claimToken?: string | null;
   userId?: string | null;
   status: MetaDeletionStatus;
   requestedAt: string;
@@ -158,12 +159,27 @@ export interface UserHashInfo {
 }
 
 /**
- * Computes the immutable canonical lock hash for a Meta identity (unkeyed SHA-256).
- * This hash NEVER changes across secret rotations or application versions, guaranteeing
- * that all versions and instances acquire the exact same advisory transaction lock.
+ * Computes the canonical advisory-lock hash for a Meta identity using a dedicated, stable HMAC secret.
+ * This secret (META_DELETION_LOCK_SECRET) is separate from the rotating record-hashing key (META_DELETION_HASH_SECRET)
+ * and remains stable across deployments and hash rotations so all application versions serialize onto the exact
+ * same advisory lock. Fails closed in production if META_DELETION_LOCK_SECRET is missing.
  */
-export function computeCanonicalLockHash(userId: string): string {
-  return crypto.createHash("sha256").update(userId.trim()).digest("hex");
+export function computeCanonicalLockHash(userId: string, secretOverride?: string): string {
+  const cleanId = userId.trim();
+  const secret = secretOverride || process.env.META_DELETION_LOCK_SECRET?.trim();
+
+  if (secret) {
+    return crypto.createHmac("sha256", secret).update(cleanId).digest("hex");
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Server misconfiguration: META_DELETION_LOCK_SECRET is required in production for canonical advisory lock derivation."
+    );
+  }
+
+  // Local/test environment fallback (keyed with dev salt)
+  return crypto.createHmac("sha256", "elvaveo_default_lock_salt_dev").update(cleanId).digest("hex");
 }
 
 /**
@@ -463,6 +479,7 @@ async function loadDeletionsFromStore(): Promise<MetaDeletionRecord[]> {
             row.user_id_hash ||
             (row.user_id ? hashUserId(row.user_id) : hashUserId(row.confirmation_code)),
           hashVersion: row.hash_version || "v1-sha256",
+          claimToken: row.claim_token || null,
           userId: row.user_id || null,
           status: (row.status as MetaDeletionStatus) || "completed",
           requestedAt: row.requested_at,
@@ -584,6 +601,7 @@ export async function saveMetaDeletionRecord(
         confirmation_code: record.confirmationCode,
         user_id_hash: record.userIdHash,
         hash_version: record.hashVersion || "v2-hmac-sha256",
+        claim_token: record.claimToken || null,
         user_id: record.userId || null,
         status: record.status,
         requested_at: record.requestedAt,
@@ -737,6 +755,7 @@ export async function recordAndExecuteMetaDeletion(
       claimed: boolean;
       status: MetaDeletionStatus;
       confirmation_code: string;
+      claim_token?: string | null;
       is_repeat?: boolean;
       requested_at?: string;
       completed_at?: string | null;
@@ -788,6 +807,7 @@ export async function recordAndExecuteMetaDeletion(
           confirmationCode: activeClaim.confirmation_code,
           userIdHash: primaryHashInfo.hash,
           hashVersion: primaryHashInfo.version,
+          claimToken: null,
           userId: null,
           status: activeClaim.status,
           requestedAt: activeClaim.requested_at || now,
@@ -834,11 +854,12 @@ export async function recordAndExecuteMetaDeletion(
         ...metadata,
       };
 
-      // Finalize database record atomically
-      if (supabase) {
+      // Finalize database record atomically with claim_token fencing
+      if (supabase && activeClaim.claim_token) {
         try {
           await supabase.rpc("finalize_meta_data_deletion", {
             p_confirmation_code: activeCode,
+            p_claim_token: activeClaim.claim_token,
             p_status: status,
             p_details: details,
           });
@@ -851,6 +872,7 @@ export async function recordAndExecuteMetaDeletion(
         confirmationCode: activeCode,
         userIdHash: primaryHashInfo.hash,
         hashVersion: primaryHashInfo.version,
+        claimToken: null,
         userId: null,
         status,
         requestedAt: activeClaim.requested_at || now,
@@ -879,6 +901,7 @@ export async function recordAndExecuteMetaDeletion(
     // B) Local transactional claim fallback (used when Supabase is offline, in tests, or pre-migration)
     const existing = records.find((r) => matchesUserId(r, userId));
     const nowMs = Date.now();
+    const localClaimToken = crypto.randomUUID();
 
     if (existing) {
       // 1. Already completed -> idempotent return
@@ -906,19 +929,21 @@ export async function recordAndExecuteMetaDeletion(
         };
       }
 
-      // 3. Status is pending, failed, or lease expired -> reclaim lease and retry!
+      // 3. Status is pending, failed, or lease expired -> reclaim lease with fresh claimToken and retry!
       console.log(
         `[meta_data_deletion] Reclaiming lease for uncompleted request ${existing.confirmationCode} (status: ${existing.status}).`
       );
       existing.status = "processing";
       existing.lockedUntil = new Date(nowMs + 5 * 60 * 1000).toISOString();
+      existing.claimToken = localClaimToken;
       await persistDeletionsToStore(records);
     } else {
-      // 4. New request -> register active lease
+      // 4. New request -> register active lease with fresh claimToken
       const leaseRecord: MetaDeletionRecord = {
         confirmationCode: generatedCode,
         userIdHash: primaryHashInfo.hash,
         hashVersion: primaryHashInfo.version,
+        claimToken: localClaimToken,
         userId: null,
         status: "processing",
         requestedAt: now,
@@ -960,6 +985,7 @@ export async function recordAndExecuteMetaDeletion(
       confirmationCode: activeConfirmationCode,
       userIdHash: primaryHashInfo.hash,
       hashVersion: primaryHashInfo.version,
+      claimToken: null,
       userId: null,
       status,
       requestedAt: existing?.requestedAt || now,
@@ -1033,6 +1059,7 @@ export async function getMetaDeletionRecord(
             data.user_id_hash ||
             (data.user_id ? hashUserId(data.user_id) : hashUserId(data.confirmation_code)),
           hashVersion: data.hash_version || "v1-sha256",
+          claimToken: data.claim_token || null,
           userId: data.user_id || null,
           status: (data.status as MetaDeletionStatus) || "completed",
           requestedAt: data.requested_at,
@@ -1046,6 +1073,52 @@ export async function getMetaDeletionRecord(
   }
 
   return null;
+}
+
+/**
+ * Renews an active deletion lease for long-running worker operations.
+ * Fails if claim token does not match (preventing stale worker updates) or lease has already expired.
+ */
+export async function renewMetaDataDeletionLease(
+  confirmationCode: string,
+  claimToken: string,
+  extensionSeconds = 300
+): Promise<{ success: boolean; error?: string; lockedUntil?: string }> {
+  if (extensionSeconds < 10 || extensionSeconds > 3600) {
+    return { success: false, error: "Invalid extension duration: must be between 10 and 3600 seconds" };
+  }
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.rpc("renew_meta_data_deletion_lease", {
+        p_confirmation_code: confirmationCode,
+        p_claim_token: claimToken,
+        p_extension_seconds: extensionSeconds,
+      });
+      if (!error && data) {
+        return data as { success: boolean; error?: string; lockedUntil?: string };
+      }
+      return { success: false, error: error?.message || "Renewal failed" };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  // Local fallback
+  const records = await loadDeletionsFromStore();
+  const existing = records.find((r) => r.confirmationCode === confirmationCode);
+  if (!existing) return { success: false, error: "record_not_found" };
+  if (existing.status !== "processing") return { success: false, error: "invalid_state_transition" };
+  if (existing.claimToken && existing.claimToken !== claimToken) return { success: false, error: "stale_claim_token" };
+  if (existing.lockedUntil && new Date(existing.lockedUntil).getTime() <= Date.now()) {
+    return { success: false, error: "lease_already_expired" };
+  }
+
+  const newExpiry = new Date(Date.now() + extensionSeconds * 1000).toISOString();
+  existing.lockedUntil = newExpiry;
+  await persistDeletionsToStore(records);
+  return { success: true, lockedUntil: newExpiry };
 }
 
 /**
