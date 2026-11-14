@@ -1274,7 +1274,7 @@ export function renderUnifiedStatusPageHtml(options: {
           '</p>' +
           '<div class="info-row">' +
             '<span class="info-label">Status</span>' +
-            '<span class="info-val" style="color: ' + statusColor + ';">' + badgeLabel + '</span>' +
+            '<span class="info-val" style="color: ' + statusColor + ';">' + statusText + '</span>' +
           '</div>' +
           '<div class="info-row">' +
             '<span class="info-label">Scope</span>' +
