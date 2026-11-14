@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.admin_credentials (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     passcode_hash TEXT NOT NULL,
+    passcode_salt TEXT,
     role VARCHAR(50) NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'superadmin')),
     is_active BOOLEAN NOT NULL DEFAULT true,
     failed_login_attempts INT NOT NULL DEFAULT 0,
@@ -27,22 +28,15 @@ ALTER TABLE public.admin_credentials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_credentials FORCE ROW LEVEL SECURITY;
 
 -- Deny public and anon access to admin credentials completely
+DROP POLICY IF EXISTS "Deny all public on admin_credentials" ON public.admin_credentials;
 CREATE POLICY "Deny all public on admin_credentials"
 ON public.admin_credentials FOR ALL
 TO anon, authenticated
 USING (false);
 
--- Seed primary administrator credentials with 'Alfabravo669#' bcrypt/blowfish hash
-INSERT INTO public.admin_credentials (email, passcode_hash, role, is_active)
-VALUES (
-    'admin@elvaveo.com',
-    crypt('Alfabravo669#', gen_salt('bf', 10)),
-    'admin',
-    true
-)
-ON CONFLICT (email) DO UPDATE
-SET passcode_hash = crypt('Alfabravo669#', gen_salt('bf', 10)),
-    is_active = true;
+-- Provision administrator accounts through Supabase Auth or the existing
+-- admin_credentials table using an operator-supplied password. Do not seed
+-- any shared/default administrator password from this schema.
 
 -- Verification function using pgcrypto crypt
 CREATE OR REPLACE FUNCTION public.verify_admin_passcode(
@@ -52,15 +46,17 @@ CREATE OR REPLACE FUNCTION public.verify_admin_passcode(
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public
 AS $$
 DECLARE
     v_stored_hash TEXT;
+    v_stored_salt TEXT;
     v_locked_until TIMESTAMPTZ;
     v_is_active BOOLEAN;
+    v_is_match BOOLEAN := false;
 BEGIN
-    SELECT passcode_hash, locked_until, is_active
-    INTO v_stored_hash, v_locked_until, v_is_active
+    SELECT passcode_hash, passcode_salt, locked_until, is_active
+    INTO v_stored_hash, v_stored_salt, v_locked_until, v_is_active
     FROM public.admin_credentials
     WHERE email = lower(trim(p_email));
 
@@ -72,9 +68,21 @@ BEGIN
         RETURN false;
     END IF;
 
-    IF v_stored_hash = crypt(p_passcode, v_stored_hash) THEN
+    IF v_stored_salt IS NOT NULL THEN
+        RETURN false;
+    ELSIF v_stored_hash LIKE '$2%' THEN
+        v_is_match := v_stored_hash = crypt(p_passcode, v_stored_hash);
+    ELSIF v_stored_hash ~ '^[0-9A-Fa-f]{64}$' THEN
+        v_is_match := lower(v_stored_hash) = encode(digest(p_passcode, 'sha256'), 'hex');
+    ELSE
+        v_is_match := v_stored_hash = p_passcode;
+    END IF;
+
+    IF v_is_match THEN
         UPDATE public.admin_credentials
-        SET failed_login_attempts = 0,
+        SET passcode_hash = crypt(p_passcode, gen_salt('bf', 12)),
+            passcode_salt = NULL,
+            failed_login_attempts = 0,
             last_login_at = now()
         WHERE email = lower(trim(p_email));
         RETURN true;
@@ -87,6 +95,9 @@ BEGIN
     END IF;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.verify_admin_passcode(VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.verify_admin_passcode(VARCHAR, VARCHAR) TO service_role;
 
 -- ============================================================================
 -- 1. INQUIRIES TABLE (Customer Submissions & Admin Management)
@@ -108,12 +119,14 @@ ALTER TABLE public.inquiries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inquiries FORCE ROW LEVEL SECURITY;
 
 -- Deny public reading of any customer contact inquiries (PII Protection)
+DROP POLICY IF EXISTS "Deny public select inquiries" ON public.inquiries;
 CREATE POLICY "Deny public select inquiries"
 ON public.inquiries FOR SELECT
 TO anon
 USING (false);
 
 -- Allow public to INSERT new contact messages (Public Contact Form)
+DROP POLICY IF EXISTS "Allow public insert inquiry" ON public.inquiries;
 CREATE POLICY "Allow public insert inquiry"
 ON public.inquiries FOR INSERT
 TO anon
@@ -126,6 +139,7 @@ WITH CHECK (
 );
 
 -- Allow authenticated administrator full SELECT on inquiries
+DROP POLICY IF EXISTS "Allow admin select inquiries" ON public.inquiries;
 CREATE POLICY "Allow admin select inquiries"
 ON public.inquiries FOR SELECT
 TO authenticated
@@ -135,6 +149,7 @@ USING (
 );
 
 -- Allow authenticated administrator to UPDATE inquiry status only
+DROP POLICY IF EXISTS "Allow admin update inquiry status" ON public.inquiries;
 CREATE POLICY "Allow admin update inquiry status"
 ON public.inquiries FOR UPDATE
 TO authenticated
@@ -147,6 +162,7 @@ WITH CHECK (
 );
 
 -- Allow authenticated administrator to DELETE inquiries
+DROP POLICY IF EXISTS "Allow admin delete inquiries" ON public.inquiries;
 CREATE POLICY "Allow admin delete inquiries"
 ON public.inquiries FOR DELETE
 TO authenticated
@@ -179,23 +195,27 @@ ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products FORCE ROW LEVEL SECURITY;
 
 -- Public can read all active products
+DROP POLICY IF EXISTS "Allow public select products" ON public.products;
 CREATE POLICY "Allow public select products"
 ON public.products FOR SELECT
 TO anon, authenticated
 USING (true);
 
 -- Only authenticated administrator can insert, update, or delete products
+DROP POLICY IF EXISTS "Allow admin insert products" ON public.products;
 CREATE POLICY "Allow admin insert products"
 ON public.products FOR INSERT
 TO authenticated
 WITH CHECK ((auth.jwt() ->> 'role') = 'admin');
 
+DROP POLICY IF EXISTS "Allow admin update products" ON public.products;
 CREATE POLICY "Allow admin update products"
 ON public.products FOR UPDATE
 TO authenticated
 USING ((auth.jwt() ->> 'role') = 'admin')
 WITH CHECK ((auth.jwt() ->> 'role') = 'admin');
 
+DROP POLICY IF EXISTS "Allow admin delete products" ON public.products;
 CREATE POLICY "Allow admin delete products"
 ON public.products FOR DELETE
 TO authenticated
@@ -222,11 +242,13 @@ CREATE TABLE IF NOT EXISTS public.projects (
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects FORCE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public select projects" ON public.projects;
 CREATE POLICY "Allow public select projects"
 ON public.projects FOR SELECT
 TO anon, authenticated
 USING (true);
 
+DROP POLICY IF EXISTS "Allow admin manage projects" ON public.projects;
 CREATE POLICY "Allow admin manage projects"
 ON public.projects FOR ALL
 TO authenticated
@@ -252,11 +274,13 @@ CREATE TABLE IF NOT EXISTS public.team (
 ALTER TABLE public.team ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.team FORCE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public select team" ON public.team;
 CREATE POLICY "Allow public select team"
 ON public.team FOR SELECT
 TO anon, authenticated
 USING (true);
 
+DROP POLICY IF EXISTS "Allow admin manage team" ON public.team;
 CREATE POLICY "Allow admin manage team"
 ON public.team FOR ALL
 TO authenticated
@@ -279,21 +303,25 @@ ALTER TABLE public.security_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.security_audit_logs FORCE ROW LEVEL SECURITY;
 
 -- Allow insert via SECURITY DEFINER function or admin
+DROP POLICY IF EXISTS "Allow authenticated insert audit logs" ON public.security_audit_logs;
 CREATE POLICY "Allow authenticated insert audit logs"
 ON public.security_audit_logs FOR INSERT
 TO authenticated
 WITH CHECK (true);
 
 -- Disallow ALL updates and deletes (Immutable append-only audit trail)
+DROP POLICY IF EXISTS "Deny update on audit logs" ON public.security_audit_logs;
 CREATE POLICY "Deny update on audit logs"
 ON public.security_audit_logs FOR UPDATE
 USING (false);
 
+DROP POLICY IF EXISTS "Deny delete on audit logs" ON public.security_audit_logs;
 CREATE POLICY "Deny delete on audit logs"
 ON public.security_audit_logs FOR DELETE
 USING (false);
 
 -- Allow admin only to read audit logs
+DROP POLICY IF EXISTS "Allow admin select audit logs" ON public.security_audit_logs;
 CREATE POLICY "Allow admin select audit logs"
 ON public.security_audit_logs FOR SELECT
 TO authenticated

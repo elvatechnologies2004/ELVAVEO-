@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { teamMembers as defaultTeam, type TeamMember } from "@/data/team";
 import { products as defaultProducts, type Product } from "@/data/products";
 import { showcaseProjects as defaultProjects } from "@/data/projectShowcase";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getSupabaseClient, getSupabasePublicClient } from "@/lib/supabase";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const TEAM_FILE = path.join(DATA_DIR, "team.json");
@@ -15,6 +15,7 @@ const PRODUCTS_TS_FILE = path.join(DATA_DIR, "products.ts");
 const PROJECTS_FILE = path.join(DATA_DIR, "projects.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 const INQUIRIES_FILE = path.join(DATA_DIR, "inquiries.json");
+const PRIVACY_POLICY_FILE = path.join(DATA_DIR, "privacy-policy.json");
 
 // Serverless writable cache fallback (for platforms like Vercel where process.cwd() is read-only)
 const TMP_DIR = path.join(os.tmpdir(), "elvaveo_store");
@@ -24,6 +25,7 @@ const TMP_PROJECTS_FILE = path.join(TMP_DIR, "projects.json");
 const TMP_SETTINGS_FILE = path.join(TMP_DIR, "settings.json");
 const TMP_INQUIRIES_FILE = path.join(TMP_DIR, "inquiries.json");
 const TMP_DELETED_INQUIRIES_FILE = path.join(TMP_DIR, "deleted_inquiries.json");
+const TMP_PRIVACY_POLICY_FILE = path.join(TMP_DIR, "privacy-policy.json");
 
 // In-memory cache to guarantee immediate cross-route reactivity within the runtime
 let memoryTeamCache: TeamMember[] | null = null;
@@ -31,6 +33,7 @@ let memoryProductsCache: Product[] | null = null;
 let memoryProjectsCache: StoredProject[] | null = null;
 let memorySettingsCache: SiteSettings | null = null;
 let memoryInquiriesCache: InquiryItem[] | null = null;
+let memoryPrivacyPolicyCache: PrivacyPolicyDocument | null = null;
 let memoryDeletedInquiryIds = new Set<string>();
 
 /** Safe JSON reader */
@@ -421,6 +424,341 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<boolean>
   } catch {}
 
   return storageSaved || fsSaved || tmpSaved || true;
+}
+
+// ==================== PRIVACY POLICY ====================
+export type PrivacyPolicyStatus = "draft" | "published" | "archived";
+
+export interface PrivacyPolicyVersion {
+  id: string;
+  versionNumber?: number;
+  title: string;
+  content: string;
+  summary: string;
+  status: PrivacyPolicyStatus;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string | null;
+  publishedBy?: string | null;
+  author: string;
+}
+
+export interface PrivacyPolicyDocument {
+  currentVersionId: string | null;
+  updatedAt: string;
+  versions: PrivacyPolicyVersion[];
+}
+
+export function sanitizePrivacyPolicyContent(value: string): string {
+  return value
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function getPublishedPrivacyPolicyVersion(document: PrivacyPolicyDocument | null | undefined): PrivacyPolicyVersion | null {
+  if (!document || !Array.isArray(document.versions) || document.versions.length === 0) {
+    return null;
+  }
+
+  return document.versions.find(
+    (version) => version.id === document.currentVersionId && version.status === "published"
+  ) ?? null;
+}
+
+interface PrivacyPolicyVersionRow {
+  id: string;
+  version_number: number;
+  status: string;
+  title: string;
+  summary: string;
+  content: string;
+  created_by: string;
+  published_by: string | null;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+}
+
+interface PrivacyPolicyDocumentRow {
+  id: string;
+  current_version_id: string | null;
+  updated_at: string;
+}
+
+function mapPrivacyPolicyVersion(row: PrivacyPolicyVersionRow): PrivacyPolicyVersion {
+  if (row.status !== "draft" && row.status !== "published" && row.status !== "archived") {
+    throw new Error("Supabase returned an invalid privacy policy version status.");
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    content: row.content,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    publishedAt: row.published_at,
+    publishedBy: row.published_by,
+    author: row.created_by,
+  };
+}
+
+function emptyPrivacyPolicyDocument(updatedAt = new Date(0).toISOString()): PrivacyPolicyDocument {
+  return { currentVersionId: null, updatedAt, versions: [] };
+}
+
+const DEFAULT_PRIVACY_POLICY_CONTENT = `## Privacy Policy
+
+ELVAVEO respects the privacy of visitors, clients, and business contacts. This policy explains the information we collect through the ELVAVEO website and how we use it.
+
+## Information we collect
+
+We may collect information you provide directly through the ELVAVEO website, including your name, email address, company, and message content when you contact us. We also automatically receive limited technical information such as browser type, operating system, referring page, and approximate usage data needed to keep the website secure and working correctly.
+
+## How we use information
+
+We use the information we collect to respond to inquiries, manage business conversations, provide services, improve the website, and maintain the security of our systems. We do not sell personal data.
+
+## Cookies and analytics
+
+Our site may use basic cookies or session tools that are necessary for basic site operation and security. If non-essential analytics or advertising tools are introduced in the future, we will update this policy and provide appropriate notice and consent controls before activating them for visitors.
+
+## Sharing and third parties
+
+We may share information with trusted service providers that help us operate our site, send email, or support business workflows. We limit sharing to what is necessary for those services and require reasonable safeguards. We may also disclose information when required by law, court order, or to protect legal rights and safety.
+
+## Retention
+
+We retain information only as long as needed to fulfill the purpose for which it was collected, to satisfy legal obligations, to resolve disputes, and to enforce agreements.
+
+## Your rights and contact
+
+You can contact us at hello@elvaveo.com to ask for access, correction, or deletion of personal data you have submitted through our website, to the extent applicable under applicable law. We will review requests in good faith and respond as required by law.
+
+## Updates
+
+This policy may be updated from time to time to reflect changes in our services, legal requirements, or operational practices. The most current version is the version published on this page.`;
+
+function createDefaultPrivacyPolicyDocument(): PrivacyPolicyDocument {
+  const now = new Date().toISOString();
+  const defaultVersion: PrivacyPolicyVersion = {
+    id: "default-v1",
+    versionNumber: 1,
+    status: "published",
+    title: "Privacy Policy",
+    summary:
+      "This notice explains what ELVAVEO collects through its website and how we handle business and contact information in a responsible, limited, and transparent way.",
+    content: DEFAULT_PRIVACY_POLICY_CONTENT,
+    createdAt: now,
+    updatedAt: now,
+    publishedAt: now,
+    publishedBy: "ELVAVEO Team",
+    author: "ELVAVEO Team",
+  };
+  return {
+    currentVersionId: "default-v1",
+    updatedAt: now,
+    versions: [defaultVersion],
+  };
+}
+
+export async function getStoredPrivacyPolicyFallback(): Promise<PrivacyPolicyDocument> {
+  if (
+    memoryPrivacyPolicyCache &&
+    Array.isArray(memoryPrivacyPolicyCache.versions) &&
+    memoryPrivacyPolicyCache.versions.length > 0
+  ) {
+    return memoryPrivacyPolicyCache;
+  }
+
+  // 1. Supabase Storage
+  const storageDoc = await readStorageJson<PrivacyPolicyDocument>("privacy-policy.json");
+  if (storageDoc && Array.isArray(storageDoc.versions) && storageDoc.versions.length > 0) {
+    memoryPrivacyPolicyCache = storageDoc;
+    return storageDoc;
+  }
+
+  // 2. Local file
+  const fileDoc = await readJson<PrivacyPolicyDocument | null>(PRIVACY_POLICY_FILE, null);
+  if (fileDoc && Array.isArray(fileDoc.versions) && fileDoc.versions.length > 0) {
+    memoryPrivacyPolicyCache = fileDoc;
+    return fileDoc;
+  }
+
+  // 3. Writable tmp runtime cache
+  const tmpDoc = await readJson<PrivacyPolicyDocument | null>(TMP_PRIVACY_POLICY_FILE, null);
+  if (tmpDoc && Array.isArray(tmpDoc.versions) && tmpDoc.versions.length > 0) {
+    memoryPrivacyPolicyCache = tmpDoc;
+    return tmpDoc;
+  }
+
+  const defaultDoc = createDefaultPrivacyPolicyDocument();
+  memoryPrivacyPolicyCache = defaultDoc;
+  return defaultDoc;
+}
+
+export async function savePrivacyPolicyFallback({
+  action,
+  title,
+  summary,
+  content,
+  actor,
+  versionId,
+}: {
+  action: "save" | "publish" | "restore";
+  title: string;
+  summary: string;
+  content: string;
+  actor: string;
+  versionId?: string | null;
+}): Promise<{ versionId: string; policy: PrivacyPolicyDocument }> {
+  const currentDoc = await getStoredPrivacyPolicyFallback();
+  const now = new Date().toISOString();
+  const versions = [...(currentDoc.versions || [])];
+
+  let targetId = versionId || crypto.randomUUID();
+
+  if (action === "restore" && versionId) {
+    const toRestore = versions.find((v) => v.id === versionId);
+    if (!toRestore) throw new Error("Target version to restore was not found.");
+    const newVersionNumber = Math.max(0, ...versions.map((v) => v.versionNumber || 0)) + 1;
+    targetId = crypto.randomUUID();
+    const restoredVersion: PrivacyPolicyVersion = {
+      ...toRestore,
+      id: targetId,
+      versionNumber: newVersionNumber,
+      status: "draft",
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: null,
+      publishedBy: null,
+      author: actor,
+    };
+    versions.push(restoredVersion);
+  } else {
+    const existingIndex = versionId ? versions.findIndex((v) => v.id === versionId) : -1;
+    if (existingIndex >= 0) {
+      const existing = versions[existingIndex];
+      const updatedVersion: PrivacyPolicyVersion = {
+        ...existing,
+        title,
+        summary,
+        content,
+        status: action === "publish" ? "published" : existing.status === "published" ? "draft" : existing.status,
+        updatedAt: now,
+        ...(action === "publish" ? { publishedAt: now, publishedBy: actor } : {}),
+      };
+      versions[existingIndex] = updatedVersion;
+    } else {
+      const newVersionNumber = Math.max(0, ...versions.map((v) => v.versionNumber || 0)) + 1;
+      const newVersion: PrivacyPolicyVersion = {
+        id: targetId,
+        versionNumber: newVersionNumber,
+        status: action === "publish" ? "published" : "draft",
+        title,
+        summary,
+        content,
+        createdAt: now,
+        updatedAt: now,
+        publishedAt: action === "publish" ? now : null,
+        publishedBy: action === "publish" ? actor : null,
+        author: actor,
+      };
+      versions.push(newVersion);
+    }
+  }
+
+  let currentVersionId = currentDoc.currentVersionId;
+  if (action === "publish") {
+    currentVersionId = targetId;
+  }
+
+  const updatedDocument: PrivacyPolicyDocument = {
+    currentVersionId,
+    updatedAt: now,
+    versions,
+  };
+
+  memoryPrivacyPolicyCache = updatedDocument;
+  await writeStorageJson("privacy-policy.json", updatedDocument);
+  await writeJson(PRIVACY_POLICY_FILE, updatedDocument);
+  await writeJson(TMP_PRIVACY_POLICY_FILE, updatedDocument);
+
+  return { versionId: targetId, policy: updatedDocument };
+}
+
+export async function getPrivacyPolicyForAdmin(): Promise<PrivacyPolicyDocument> {
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const { data: document, error: documentError } = await supabase
+        .from("privacy_policy_documents")
+        .select("id,current_version_id,updated_at")
+        .eq("slug", "privacy-policy")
+        .maybeSingle();
+
+      if (!documentError && document) {
+        const documentRow = document as PrivacyPolicyDocumentRow;
+        const { data: versions, error: versionsError } = await supabase
+          .from("privacy_policy_versions")
+          .select("id,version_number,status,title,summary,content,created_by,published_by,created_at,updated_at,published_at")
+          .eq("document_id", documentRow.id)
+          .order("version_number", { ascending: true });
+
+        if (!versionsError && Array.isArray(versions) && versions.length > 0) {
+          return {
+            currentVersionId: documentRow.current_version_id,
+            updatedAt: documentRow.updated_at,
+            versions: versions.map((version: PrivacyPolicyVersionRow) => mapPrivacyPolicyVersion(version)),
+          };
+        }
+      }
+    } catch {}
+  }
+
+  return getStoredPrivacyPolicyFallback();
+}
+
+export async function getPublishedPrivacyPolicy(): Promise<PrivacyPolicyDocument> {
+  const supabase = getSupabasePublicClient();
+  if (supabase) {
+    try {
+      const { data: document, error: documentError } = await supabase
+        .from("privacy_policy_documents")
+        .select("id,current_version_id,updated_at")
+        .eq("slug", "privacy-policy")
+        .maybeSingle();
+
+      if (!documentError && document) {
+        const documentRow = document as PrivacyPolicyDocumentRow;
+        if (documentRow.current_version_id) {
+          const { data: version, error: versionError } = await supabase
+            .from("privacy_policy_versions")
+            .select("id,version_number,status,title,summary,content,created_by,published_by,created_at,updated_at,published_at")
+            .eq("id", documentRow.current_version_id)
+            .eq("document_id", documentRow.id)
+            .eq("status", "published")
+            .maybeSingle();
+
+          if (!versionError && version) {
+            const mappedVersion = mapPrivacyPolicyVersion(version as PrivacyPolicyVersionRow);
+            return {
+              currentVersionId: mappedVersion.id,
+              updatedAt: documentRow.updated_at,
+              versions: [mappedVersion],
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return getStoredPrivacyPolicyFallback();
 }
 
 // ==================== INQUIRIES & LEADS ====================

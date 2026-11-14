@@ -24,6 +24,12 @@ const serviceLinks = services.map((service) => ({
   href: "/services",
 }));
 
+/** Quick links for the footer, including Privacy & Policy */
+const quickLinks = [
+  ...navItems,
+  { label: "Privacy & Policy", href: "/privacy-policy" },
+];
+
 /**
  * Glass site footer with navigation, products, services, and contact links.
  */
@@ -54,7 +60,7 @@ export default function Footer() {
               </p>
             </div>
 
-            <FooterLinkColumn title="Quick Links" links={navItems} />
+            <FooterLinkColumn title="Quick Links" links={quickLinks} />
             <FooterLinkColumn title="Products" links={productLinks} external />
             <FooterLinkColumn title="Services" links={serviceLinks} />
 
@@ -104,6 +110,13 @@ export default function Footer() {
             &copy; {year} {SITE_NAME}. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
+            <Link
+              href="/privacy-policy"
+              className="inline-flex items-center gap-1 text-[12px] text-navy/70 transition-colors hover:text-blue"
+            >
+              Privacy & Policy
+            </Link>
+            <span className="text-muted/40">&bull;</span>
             <Link
               href="/admin"
               className="inline-flex items-center gap-1 text-[12px] text-navy/70 transition-colors hover:text-blue"

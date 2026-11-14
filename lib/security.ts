@@ -3,29 +3,14 @@ import { NextResponse } from "next/server";
 
 export const ADMIN_COOKIE_NAME = "elvaveo_admin_token";
 
-// Fallback secret for development/build if ADMIN_SESSION_SECRET is not configured in .env
-const SERVER_SECRET =
-  process.env.ADMIN_SESSION_SECRET ||
-  process.env.RESEND_API_KEY ||
-  "elvaveo_sec_key_e4368204_9921_production_hardened";
-
-// Allowed admin passcodes (can be set via ADMIN_PASSWORD environment variable)
-const CONFIGURED_ADMIN_PASSCODE = process.env.ADMIN_PASSWORD || "Alfabravo669#";
-const ACCEPTED_PASSCODES = [
-  CONFIGURED_ADMIN_PASSCODE.trim(),
-  CONFIGURED_ADMIN_PASSCODE.toLowerCase().trim(),
-  "Alfabravo669#",
-  "alfabravo669#",
-  "elvaveo",
-];
-
-// In-memory store for active 2FA tokens with 5-minute TTL
-interface TwoFactorToken {
-  code: string;
-  expiresAt: number;
-  attempts: number;
+function getRequiredSecret(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value && value.length >= 32 ? value : null;
 }
-const activeTwoFactorTokens = new Map<string, TwoFactorToken>();
+
+export function isAdminSessionSecretConfigured(): boolean {
+  return getRequiredSecret("ADMIN_SESSION_SECRET") !== null;
+}
 
 /**
  * Validate request origin for state-changing requests to defend against CSRF attacks
@@ -89,18 +74,20 @@ export function validateRequestOrigin(request: Request): boolean {
 /**
  * Generate a cryptographically signed session token: payload.hmacSignature
  */
-export function createSignedSessionToken(userEmail: string = "admin@elvaveo.com"): string {
+export function createSignedSessionToken(userEmail: string, role: "admin" | "superadmin" = "admin"): string {
+  const serverSecret = getRequiredSecret("ADMIN_SESSION_SECRET");
+  if (!serverSecret) {
+    throw new Error("ADMIN_SESSION_SECRET is not configured. Authentication is unavailable.");
+  }
+
   const payload = {
-    role: "admin",
+    role,
     user: userEmail,
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
   };
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac("sha256", SERVER_SECRET)
-    .update(payloadB64)
-    .digest("base64url");
+  const signature = crypto.createHmac("sha256", serverSecret).update(payloadB64).digest("base64url");
   return `${payloadB64}.${signature}`;
 }
 
@@ -108,17 +95,15 @@ export function createSignedSessionToken(userEmail: string = "admin@elvaveo.com"
  * Verify a signed session token. Returns null if invalid or expired.
  */
 export function verifySessionToken(token: string | undefined): { role: string; user: string } | null {
+  const serverSecret = getRequiredSecret("ADMIN_SESSION_SECRET");
+  if (!serverSecret) return null;
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
 
   const [payloadB64, signature] = parts;
-  const expectedSignature = crypto
-    .createHmac("sha256", SERVER_SECRET)
-    .update(payloadB64)
-    .digest("base64url");
+  const expectedSignature = crypto.createHmac("sha256", serverSecret).update(payloadB64).digest("base64url");
 
-  // Constant-time comparison to prevent timing side-channel attacks
   const sigBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expectedSignature);
   if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
@@ -128,13 +113,16 @@ export function verifySessionToken(token: string | undefined): { role: string; u
   try {
     const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
     const now = Math.floor(Date.now() / 1000);
-    if (!payload.exp || payload.exp < now) {
+    if (typeof payload.exp !== "number" || payload.exp <= now) {
       return null;
     }
-    if (payload.role !== "admin") {
+    if (payload.role !== "admin" && payload.role !== "superadmin") {
       return null;
     }
-    return { role: payload.role, user: payload.user || "admin@elvaveo.com" };
+    if (typeof payload.user !== "string" || !payload.user.includes("@")) {
+      return null;
+    }
+    return { role: payload.role, user: payload.user };
   } catch {
     return null;
   }
@@ -147,6 +135,20 @@ export function verifySessionToken(token: string | undefined): { role: string; u
 export async function requireAdminAuth(request: Request): Promise<
   { authenticated: true; user: string } | { authenticated: false; errorResponse: NextResponse }
 > {
+  if (!isAdminSessionSecretConfigured()) {
+    return {
+      authenticated: false,
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          error: "Authentication is not configured. Set ADMIN_SESSION_SECRET in the environment.",
+          code: "AUTH_SECRET_MISSING",
+        },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      ),
+    };
+  }
+
   // CSRF Origin Check
   if (!validateRequestOrigin(request)) {
     return {
@@ -210,63 +212,6 @@ export async function requireAdminAuth(request: Request): Promise<
   }
 
   return { authenticated: true, user: session.user };
-}
-
-/**
- * Verify master passcode against secure server hash / list
- */
-export function verifyMasterPasscode(enteredPasscode: string): boolean {
-  if (!enteredPasscode || typeof enteredPasscode !== "string") return false;
-  const clean = enteredPasscode.trim();
-  const cleanLower = clean.toLowerCase();
-  return ACCEPTED_PASSCODES.some(
-    (p) => p === clean || p.toLowerCase() === cleanLower
-  );
-}
-
-/**
- * Generate a 6-digit dynamic 2FA code and store with 5-minute TTL
- */
-export function generateTwoFactorToken(userKey: string = "admin"): string {
-  const randomNum = crypto.randomInt(100000, 999999).toString();
-  activeTwoFactorTokens.set(userKey, {
-    code: randomNum,
-    expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-    attempts: 0,
-  });
-  return randomNum;
-}
-
-/**
- * Verify a 6-digit 2FA code (includes attempt limiting)
- */
-export function verifyTwoFactorToken(enteredCode: string, userKey: string = "admin"): boolean {
-  const clean = enteredCode.trim();
-  // Standard demo code fallbacks for local review
-  if (clean === "849201" || clean === "123456" || clean === "778899") {
-    return true;
-  }
-
-  const stored = activeTwoFactorTokens.get(userKey);
-  if (!stored) return false;
-
-  // Max 5 attempts per token to prevent brute force
-  stored.attempts++;
-  if (stored.attempts > 5) {
-    activeTwoFactorTokens.delete(userKey);
-    return false;
-  }
-
-  if (Date.now() > stored.expiresAt) {
-    activeTwoFactorTokens.delete(userKey);
-    return false;
-  }
-
-  const isValid = stored.code === clean;
-  if (isValid) {
-    activeTwoFactorTokens.delete(userKey);
-  }
-  return isValid;
 }
 
 /**

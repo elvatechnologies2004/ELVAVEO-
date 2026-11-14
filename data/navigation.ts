@@ -11,10 +11,12 @@ export interface NavItem {
  * Derived from the shared route table in lib/constants so the menu, the
  * sitemap, and the real pages can never drift apart.
  */
-export const navItems: NavItem[] = APP_ROUTES.map(({ label, path }) => ({
-  label,
-  href: path,
-}));
+export const navItems: NavItem[] = APP_ROUTES
+  .filter((route) => !route.hiddenFromNav)
+  .map(({ label, path }) => ({
+    label,
+    href: path,
+  }));
 
 export interface SocialLink {
   label: string;

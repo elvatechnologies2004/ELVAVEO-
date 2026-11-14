@@ -1,18 +1,21 @@
+import "server-only";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
-const rawSupabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  "https://rbwkyueslfmvuhborahn.supabase.co";
-const SUPABASE_URL = rawSupabaseUrl ? rawSupabaseUrl.trim().replace(/\/+$/, "") : "";
-const SUPABASE_SERVICE_KEY = (
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJid2t5dWVzbGZtdnVoYm9yYWhuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTk3ODM4MiwiZXhwIjoyMTA3NTU0MzgyfQ.Bu_HctT-Keon71MrRbbPepPtVTCTgeC4Zc5zJPa_ncI"
-)?.trim();
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/\/+$/, "") || "";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
 
 // Singleton client instance for server-side operations
 let supabaseServerClient: SupabaseClient | null = null;
+let supabasePublicClient: SupabaseClient | null = null;
+
+const LEGACY_ADMIN_EMAILS = [
+  "admin@elvaveo.com",
+  "elvatechnologies01@gmail.com",
+  "syedhussainali@elvaveo.com",
+  "founder@elvaveo.ai",
+];
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
@@ -29,11 +32,42 @@ export function getSupabaseClient(): SupabaseClient | null {
   return supabaseServerClient;
 }
 
+export function isSupabaseServerConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY);
+}
+
+export function getSupabasePublicClient(): SupabaseClient | null {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return null;
+  }
+  if (!supabasePublicClient) {
+    supabasePublicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+  return supabasePublicClient;
+}
+
+function isAuthorizedAdminEmail(email: string): boolean {
+  const configuredEmails = [
+    process.env.ADMIN_EMAIL,
+    ...(process.env.ADMIN_ALLOWED_EMAILS || "").split(","),
+    ...LEGACY_ADMIN_EMAILS,
+  ]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  return configuredEmails.includes(email);
+}
+
 export interface AdminVerifyResult {
   success: boolean;
-  source: "supabase_auth" | "supabase_db" | "mastercode";
+  source: "supabase_auth" | "supabase_db";
   email: string;
-  role: string;
+  role: "admin" | "superadmin" | "none";
   error?: string;
 }
 
@@ -53,7 +87,7 @@ export async function verifyAdminWithSupabase(
   if (!email || !email.includes("@")) {
     return {
       success: false,
-      source: "mastercode",
+      source: "supabase_auth",
       email: email || "unknown",
       role: "none",
       error: "Please enter a valid administrator email address.",
@@ -63,7 +97,7 @@ export async function verifyAdminWithSupabase(
   if (!passcode) {
     return {
       success: false,
-      source: "mastercode",
+      source: "supabase_auth",
       email,
       role: "none",
       error: "Please enter your administrator password.",
@@ -71,22 +105,32 @@ export async function verifyAdminWithSupabase(
   }
 
   const supabase = getSupabaseClient();
+  if (!supabase) {
+    return {
+      success: false,
+      source: "supabase_auth",
+      email,
+      role: "none",
+      error: "Supabase administrator authentication is not configured.",
+    };
+  }
 
-  // 1. Check Supabase Live Connection if configured
-  if (supabase) {
-    try {
-      // 1A. Try Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password: passcode,
-      });
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password: passcode,
+    });
 
-      if (!authError && authData.user) {
-        const userRole =
-          authData.user.app_metadata?.role ||
-          authData.user.user_metadata?.role ||
-          "admin";
+    if (!authError && authData.user) {
+      const metadataRole = authData.user.app_metadata?.role;
+      const role =
+        metadataRole === "superadmin"
+          ? "superadmin"
+          : metadataRole === "admin" || isAuthorizedAdminEmail(email)
+            ? "admin"
+            : null;
 
+      if (role) {
         await logSecurityEvent("admin_login_success", email, clientIp, {
           source: "supabase_auth",
         });
@@ -95,144 +139,106 @@ export async function verifyAdminWithSupabase(
           success: true,
           source: "supabase_auth",
           email: authData.user.email || email,
-          role: userRole,
+          role,
+        };
+      }
+    }
+  } catch (error) {
+    console.error("[supabase] Administrator Auth verification failed:", error);
+  }
+
+  const { data: credRow, error: credError } = await supabase
+    .from("admin_credentials")
+    .select("id,email,role,passcode_hash,passcode_salt,failed_login_attempts,locked_until,is_active")
+    .eq("email", email)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (credError) {
+    console.error("[supabase] Administrator credential lookup failed:", credError);
+  }
+
+  if (!credError && credRow) {
+    if (credRow.locked_until && new Date(credRow.locked_until).getTime() > Date.now()) {
+      return {
+        success: false,
+        source: "supabase_db",
+        email,
+        role: "none",
+        error: "Security lockout active due to multiple failed attempts. Try again later.",
+      };
+    }
+
+    let isMatch = false;
+    if (credRow.passcode_salt && credRow.passcode_hash) {
+      const computedHash = crypto
+        .pbkdf2Sync(passcode, credRow.passcode_salt, 10000, 64, "sha512")
+        .toString("hex");
+      const actual = Buffer.from(computedHash);
+      const expected = Buffer.from(credRow.passcode_hash);
+      isMatch = actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+    } else {
+      const { data, error } = await supabase.rpc("verify_admin_passcode", {
+        p_email: email,
+        p_passcode: passcode,
+      });
+      if (error) {
+        console.error("[supabase] Bcrypt administrator verification failed:", error);
+      } else {
+        isMatch = data === true;
+      }
+    }
+
+    if (isMatch) {
+      const role = credRow.role === "superadmin" ? "superadmin" : credRow.role === "admin" ? "admin" : null;
+      if (!role) {
+        return {
+          success: false,
+          source: "supabase_db",
+          email,
+          role: "none",
+          error: "This account is not authorized for administrator access.",
         };
       }
 
-      // 1B. Try Supabase `admin_credentials` table
-      const { data: credRow, error: credError } = await supabase
-        .from("admin_credentials")
-        .select("*")
-        .eq("email", email)
-        .eq("is_active", true)
-        .single();
-
-      if (!credError && credRow) {
-        // Check if account is temporarily locked
-        if (credRow.locked_until && new Date(credRow.locked_until).getTime() > Date.now()) {
-          return {
-            success: false,
-            source: "supabase_db",
-            email,
-            role: "admin",
-            error: "Security lockout active due to multiple failed attempts. Try again in 15 minutes.",
-          };
-        }
-
-        // Verify hashed passcode
-        let isMatch = false;
-        if (credRow.passcode_hash) {
-          if (credRow.passcode_salt) {
-            const computedHash = crypto
-              .pbkdf2Sync(passcode, credRow.passcode_salt, 10000, 64, "sha512")
-              .toString("hex");
-            isMatch = crypto.timingSafeEqual(
-              Buffer.from(computedHash),
-              Buffer.from(credRow.passcode_hash)
-            );
-          } else {
-            const sha256 = crypto.createHash("sha256").update(passcode).digest("hex");
-            isMatch = credRow.passcode_hash === passcode || credRow.passcode_hash === sha256;
-          }
-        }
-
-        if (isMatch) {
-          // Reset failed attempts & update last_login
-          await supabase
-            .from("admin_credentials")
-            .update({
-              failed_login_attempts: 0,
-              last_login_at: new Date().toISOString(),
-            })
-            .eq("id", credRow.id);
-
-          await logSecurityEvent("admin_login_success", email, clientIp, {
-            source: "supabase_db",
-          });
-
-          return {
-            success: true,
-            source: "supabase_db",
-            email,
-            role: credRow.role || "admin",
-          };
-        } else {
-          // Increment failed attempts
-          const attempts = (credRow.failed_login_attempts || 0) + 1;
-          const updateData: Record<string, any> = { failed_login_attempts: attempts };
-          if (attempts >= 5) {
-            updateData.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-          }
-          await supabase.from("admin_credentials").update(updateData).eq("id", credRow.id);
-
-          await logSecurityEvent("admin_login_failure", email, clientIp, {
-            source: "supabase_db",
-            attempts,
-          });
-
-          return {
-            success: false,
-            source: "supabase_db",
-            email,
-            role: "none",
-            error: "Galat Password (Incorrect Password). Access denied.",
-          };
-        }
+      if (credRow.passcode_salt) {
+        await supabase
+          .from("admin_credentials")
+          .update({
+            failed_login_attempts: 0,
+            last_login_at: new Date().toISOString(),
+          })
+          .eq("id", credRow.id);
       }
-    } catch (err) {
-      console.error("[supabase] Error checking credentials against Supabase:", err);
+
+      await logSecurityEvent("admin_login_success", email, clientIp, {
+        source: "supabase_db",
+      });
+
+      return { success: true, source: "supabase_db", email, role };
+    }
+
+    if (credRow.passcode_salt) {
+      const attempts = (credRow.failed_login_attempts || 0) + 1;
+      await supabase
+        .from("admin_credentials")
+        .update({
+          failed_login_attempts: attempts,
+          ...(attempts >= 5
+            ? { locked_until: new Date(Date.now() + 15 * 60 * 1000).toISOString() }
+            : {}),
+        })
+        .eq("id", credRow.id);
     }
   }
 
-  // 2. Strict Administrator ID (Email) Verification
-  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "admin@elvaveo.com").toLowerCase().trim();
-  const allowedAdminEmails = [
-    configuredAdminEmail,
-    "admin@elvaveo.com",
-    "elvatechnologies01@gmail.com",
-    "syedhussainali@elvaveo.com",
-  ];
-
-  const isAuthorizedEmail = allowedAdminEmails.includes(email);
-  if (!isAuthorizedEmail) {
-    await logSecurityEvent("admin_login_failure_unauthorized_id", email, clientIp);
-    return {
-      success: false,
-      source: "mastercode",
-      email,
-      role: "none",
-      error: "Galat ID (Unauthorized Administrator Email). Access denied.",
-    };
-  }
-
-  // 3. Strict Master Password Check (Alfabravo669#)
-  const masterPasscode = process.env.ADMIN_PASSWORD || "Alfabravo669#";
-  const isMasterMatch =
-    passcode === masterPasscode ||
-    passcode === "Alfabravo669#" ||
-    passcode.toLowerCase() === "alfabravo669#";
-
-  if (isMasterMatch) {
-    await logSecurityEvent("admin_login_success", email, clientIp, {
-      source: "mastercode",
-    });
-
-    return {
-      success: true,
-      source: "mastercode",
-      email,
-      role: "admin",
-    };
-  }
-
-  await logSecurityEvent("admin_login_failure_wrong_password", email, clientIp);
-
+  await logSecurityEvent("admin_login_failure", email, clientIp);
   return {
     success: false,
-    source: "mastercode",
+    source: "supabase_auth",
     email,
     role: "none",
-    error: "Galat Password (Incorrect Password). Access denied.",
+    error: "Administrator credentials were not accepted.",
   };
 }
 

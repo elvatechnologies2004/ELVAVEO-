@@ -9,6 +9,7 @@ import AdminProducts from "@/components/admin/AdminProducts";
 import AdminTeam from "@/components/admin/AdminTeam";
 import AdminProjects from "@/components/admin/AdminProjects";
 import AdminSettings from "@/components/admin/AdminSettings";
+import AdminPrivacyPolicy from "@/components/admin/AdminPrivacyPolicy";
 import AdminLoginPage from "@/components/admin/AdminLoginPage";
 import type { InquiryItem } from "@/app/api/admin/inquiries/route";
 
@@ -243,6 +244,8 @@ export default function AdminPage() {
             {currentTab === "team" && <AdminTeam />}
 
             {currentTab === "projects" && <AdminProjects />}
+
+            {currentTab === "privacy" && <AdminPrivacyPolicy />}
 
             {currentTab === "settings" && <AdminSettings inquiries={inquiries} />}
           </div>

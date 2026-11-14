@@ -22,7 +22,8 @@ export type AdminTab =
   | "products"
   | "team"
   | "projects"
-  | "settings";
+  | "settings"
+  | "privacy";
 
 interface AdminSidebarProps {
   currentTab: AdminTab;
@@ -57,6 +58,7 @@ export default function AdminSidebar({
     { id: "products", label: "Products & SaaS", icon: Layers },
     { id: "team", label: "Team Members", icon: Users },
     { id: "projects", label: "Portfolio Projects", icon: Briefcase },
+    { id: "privacy", label: "Privacy Policy", icon: Shield },
     { id: "settings", label: "System & Settings", icon: Settings },
   ];
 

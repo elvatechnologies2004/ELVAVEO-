@@ -23,7 +23,9 @@ The marketing site for **ELVAVEO** — a software studio that builds digital pro
 | Email delivery | Resend HTTP API (no SDK) |
 | Hosting | Vercel |
 
-No secrets ship to the browser. The only server-side endpoint is `POST /api/contact`.
+Secrets remain server-side. API routes handle contact submissions and
+cookie-authenticated administrator operations; public privacy-policy reads are
+limited to the current published version by database RLS.
 
 ---
 
@@ -63,6 +65,12 @@ copy .env.example .env.local      # Windows PowerShell
 | `RESEND_API_KEY` | **Yes** | Resend API key. Server-only — never expose it as `NEXT_PUBLIC_`. |
 | `CONTACT_EMAIL` | No | Inbox for form submissions. Defaults to `hello@elvaveo.com`. |
 | `RESEND_FROM_EMAIL` | No | Sender address. See the note below. |
+| `ADMIN_SESSION_SECRET` | **Yes** | Server-only HMAC signing secret with at least 32 characters. Keep its value stable to preserve active sessions. |
+| `ADMIN_EMAIL` | **Yes** | Existing administrator email used for Supabase Auth authorization. |
+| `ADMIN_ALLOWED_EMAILS` | No | Comma-separated additional administrator emails. |
+| `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Supabase project URL. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Public Supabase key; database RLS limits policy reads to the current published version. |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Server-only key for admin verification and database mutations. Never expose it to browser code. |
 
 `.env.local` is gitignored. Only `.env.example` is committed.
 
@@ -90,7 +98,12 @@ Set on Vercel:
 | `/products` | Products (Finlo, FinloCRM) |
 | `/projects` | Projects |
 | `/contact` | Contact |
+| `/privacy-policy` | Currently published privacy policy |
+| `/admin` | Administrator panel |
+| `/admin/login` | Administrator login |
 | `/api/contact` | `POST` only — sends email via Resend |
+| `/api/admin/auth` | Administrator login and session status |
+| `/api/admin/privacy-policy` | Admin-only policy draft and version operations |
 | `/sitemap.xml` | Generated from `lib/constants.ts` |
 | `/robots.txt` | Generated |
 | `*` | Branded 404 (`app/not-found.tsx`) |
@@ -104,8 +117,10 @@ app/
   layout.tsx          # fonts + site-wide metadata
   page.tsx            # home
   globals.css         # ELVAVEO design tokens (navy, blue, cyan, violet, ice)
-  about/ services/ products/ projects/ contact/
+  about/ services/ products/ projects/ contact/ privacy-policy/ admin/
   api/contact/route.ts
+  api/admin/auth/route.ts
+  api/admin/privacy-policy/route.ts
   error.tsx  not-found.tsx  loading.tsx  robots.ts  sitemap.ts
 
 components/
@@ -115,8 +130,10 @@ components/
   about/ products/ projects/   # page-specific pieces
   *.tsx               # home sections + shared UI
 
+components/admin/     # administrator panel
 data/                 # static content arrays (products, services, projects…)
-lib/                  # cn.ts, constants.ts (brand, routes, product links)
+lib/                  # dataStore.ts, security.ts, supabase.ts, site constants
+supabase/migrations/  # versioned database migrations
 types/                # shared types
 public/               # brand, images, icons, og-image.png
 scripts/              # optional Windows-only brand asset generator
@@ -172,6 +189,44 @@ disabled while a request is in flight, so a message cannot be sent twice.
    what Vercel shows for your project.
 
 Production runs on `https://elvaveo.com`.
+
+### Admin authentication and privacy-policy data
+
+Admin login is verified through the existing Supabase Auth account or an
+existing active `admin_credentials` record. The application no longer accepts
+a shared environment master password or demo verification codes. Existing
+Supabase Auth users and database credential rows are not deleted. Legacy
+unsalted database passcodes verified by the service-only RPC are rehashed to
+bcrypt after successful login; salted PBKDF2 records remain supported and are
+not rewritten. Keep the current `ADMIN_SESSION_SECRET` stable when deploying
+so existing signed sessions remain valid.
+
+Before promoting this auth change, set the administrator email allowlist and
+the Supabase URL, anon key, and server-only service-role key in the staging
+environment. Sign in with the existing administrator account, then verify
+`GET /api/admin/auth` reports an authenticated session and that the protected
+privacy-policy API is accessible. If the administrator currently relies only
+on the old environment master-password path, first provision that identity in
+Supabase Auth or the existing `admin_credentials` table. Do not remove the
+obsolete `ADMIN_PASSWORD` deployment variable until this replacement login is
+verified; the new application code does not read it.
+
+Apply `supabase/migrations/20261114_privacy_policy_versions.sql` to Supabase
+before deploying the updated application. It adds the verifier's `passcode_salt`
+column and the database-backed policy schema. The migration creates an empty
+document and does not add or publish legal text. The legacy import tool
+backs up a stored JSON document before importing it:
+
+```powershell
+node scripts\migrate-privacy-policy.mjs
+node scripts\migrate-privacy-policy.mjs --apply --backup="C:\secure-backups\privacy-policy.json" --actor="admin@example.com"
+```
+
+The first command validates a legacy source without changing data. The second
+requires the migration to be applied and the operator to provide a new,
+non-overwriting backup path. If no legacy JSON is present, the script exits
+without importing; the current code-defined public fallback remains unchanged.
+Never commit a backup or a service-role key.
 
 ### Optional: regenerate brand icons
 

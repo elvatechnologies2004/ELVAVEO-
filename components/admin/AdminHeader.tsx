@@ -37,6 +37,10 @@ const tabTitles: Record<AdminTab, { title: string; subtitle: string }> = {
     title: "System Settings",
     subtitle: "Brand identity, API diagnostics, and platform configurations",
   },
+  privacy: {
+    title: "Privacy Policy",
+    subtitle: "Manage the live policy and publish approved content",
+  },
 };
 
 export default function AdminHeader({

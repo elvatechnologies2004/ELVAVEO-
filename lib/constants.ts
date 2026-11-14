@@ -43,6 +43,8 @@ export interface AppRoute {
   /** Sitemap priority, 0-1. */
   priority: number;
   changeFrequency: "daily" | "weekly" | "monthly" | "yearly";
+  /** If true, hidden from the primary header navigation menu. */
+  hiddenFromNav?: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: "/services", label: "Services", priority: 0.9, changeFrequency: "monthly" },
   { path: "/products", label: "Products", priority: 0.9, changeFrequency: "monthly" },
   { path: "/projects", label: "Projects", priority: 0.7, changeFrequency: "monthly" },
+  { path: "/privacy-policy", label: "Privacy Policy", priority: 0.5, changeFrequency: "yearly", hiddenFromNav: true },
   { path: "/contact", label: "Contact", priority: 0.8, changeFrequency: "yearly" },
 ] as const;
 

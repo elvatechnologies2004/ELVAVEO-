@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import {
   ADMIN_COOKIE_NAME,
   createSignedSessionToken,
+  isAdminSessionSecretConfigured,
   requireAdminAuth,
+  validateRequestOrigin,
 } from "@/lib/security";
 import { checkRateLimit, getClientIp, resetRateLimit } from "@/lib/rateLimit";
-import { verifyAdminWithSupabase, logSecurityEvent } from "@/lib/supabase";
+import {
+  isSupabaseServerConfigured,
+  logSecurityEvent,
+  verifyAdminWithSupabase,
+} from "@/lib/supabase";
 import { z } from "zod";
 
 const AuthActionSchema = z.discriminatedUnion("action", [
@@ -52,6 +58,13 @@ export async function GET(request: Request) {
  * POST: Single-step direct authentication linked with Supabase & Mastercode
  */
 export async function POST(request: Request) {
+  if (!validateRequestOrigin(request)) {
+    return NextResponse.json(
+      { success: false, error: "Cross-site request rejected.", code: "CSRF_ORIGIN_MISMATCH" },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const ip = getClientIp(request);
 
   // Rate limit: 8 login attempts per 10 minutes per IP
@@ -95,12 +108,30 @@ export async function POST(request: Request) {
 
   const data = parsed.data;
 
-  // Direct 1-Step Login (ID & Password Verified via Supabase & Mastercode Alfabravo669#)
+  // Login is verified through Supabase Auth or the existing admin_credentials table.
   if (data.action === "login" || data.action === "login_step1") {
-    const adminEmail = data.email || "admin@elvaveo.com";
+    if (!isAdminSessionSecretConfigured() || !isSupabaseServerConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Administrator authentication is not configured.",
+          code: "AUTH_CONFIGURATION_MISSING",
+        },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    if (!data.email) {
+      return NextResponse.json(
+        { success: false, error: "Administrator email is required." },
+        { status: 400 }
+      );
+    }
+
+    const adminEmail = data.email;
     const verifyResult = await verifyAdminWithSupabase(adminEmail, data.passcode, ip);
 
-    if (!verifyResult.success) {
+    if (!verifyResult.success || verifyResult.role === "none") {
       return NextResponse.json(
         {
           success: false,
@@ -112,12 +143,7 @@ export async function POST(request: Request) {
 
     // Direct Login Successful — Issue Cryptographic Session Token & Cookie
     const userEmail = verifyResult.email || adminEmail;
-    const sessionToken = createSignedSessionToken(userEmail);
-
-    await logSecurityEvent("admin_login_success", userEmail, ip, {
-      source: verifyResult.source,
-      directLogin: true,
-    });
+    const sessionToken = createSignedSessionToken(userEmail, verifyResult.role);
 
     // Reset rate limit for this IP on successful authentication
     resetRateLimit(`auth:${ip}`);
@@ -125,7 +151,6 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       authenticated: true,
-      token: sessionToken,
       user: userEmail,
       message: "Authentication successful. Admin session active.",
     });
@@ -146,7 +171,7 @@ export async function POST(request: Request) {
 
   // LOGOUT
   if (data.action === "logout") {
-    await logSecurityEvent("admin_logout", "admin@elvaveo.com", ip);
+    await logSecurityEvent("admin_logout", "unknown", ip);
 
     const response = NextResponse.json({
       success: true,
@@ -173,8 +198,15 @@ export async function POST(request: Request) {
  * DELETE: Direct session termination
  */
 export async function DELETE(request: Request) {
+  if (!validateRequestOrigin(request)) {
+    return NextResponse.json(
+      { success: false, error: "Cross-site request rejected.", code: "CSRF_ORIGIN_MISMATCH" },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const ip = getClientIp(request);
-  await logSecurityEvent("admin_logout_session_destroyed", "admin@elvaveo.com", ip);
+  await logSecurityEvent("admin_logout_session_destroyed", "unknown", ip);
 
   const response = NextResponse.json({
     success: true,
