@@ -15,7 +15,8 @@ export interface MetaSignedRequestPayload {
 
 export interface MetaDeletionRecord {
   confirmationCode: string;
-  userId: string;
+  userIdHash: string;
+  userId?: string | null;
   status: MetaDeletionStatus;
   requestedAt: string;
   completedAt?: string | null;
@@ -45,6 +46,11 @@ const TMP_DELETIONS_FILE = path.join(TMP_DIR, "meta-deletion-requests.json");
 
 let memoryDeletionsCache: MetaDeletionRecord[] | null = null;
 let supabaseClient: SupabaseClient | null = null;
+
+const inFlightDeletionLocks = new Map<
+  string,
+  Promise<{ confirmationCode: string; isRepeat: boolean; record: MetaDeletionRecord }>
+>();
 
 interface RateLimitRecord {
   timestamps: number[];
@@ -130,14 +136,54 @@ export function getClientIpSafe(request: Request): string {
 }
 
 /**
+ * Generates a strictly alphanumeric, cryptographically secure confirmation code.
+ * Complies with Meta's requirement for alphanumeric confirmation codes.
+ * Output: 32-character uppercase alphanumeric string (0-9, A-Z).
+ */
+export function generateAlphanumericConfirmationCode(length = 32): string {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const bytes = crypto.randomBytes(length);
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars[bytes[i] % chars.length];
+  }
+  return result;
+}
+
+/**
+ * Creates a non-reversible cryptographic SHA-256 hash of a Meta user ID.
+ * Minimizes retained PII in storage and database while maintaining idempotency.
+ */
+export function hashUserId(userId: string): string {
+  return crypto.createHash("sha256").update(userId.trim()).digest("hex");
+}
+
+/**
+ * Identifies explicit test identities for non-destructive production/staging testing.
+ */
+export function isTestIdentity(userId: string): boolean {
+  const normalized = userId.trim().toLowerCase();
+  return (
+    normalized.startsWith("test_") ||
+    normalized.startsWith("mock_") ||
+    normalized.startsWith("sandbox_") ||
+    normalized === "meta_compliance_reviewer" ||
+    normalized === "test_compliance_reviewer"
+  );
+}
+
+/**
  * Validates whether a confirmation code format is safe and well-formed.
- * Confirmation codes must be 8-80 characters of alphanumeric, hyphens, and underscores.
- * Matches standard ELVAVEO codes (meta_del_[hex32]) while safely preventing injections.
+ * Accepts strictly alphanumeric codes (16-64 chars), while safely supporting
+ * legacy 'meta_del_' codes for migration backwards compatibility.
  */
 export function isValidConfirmationCode(code: unknown): code is string {
   if (typeof code !== "string") return false;
   const trimmed = code.trim();
-  return /^[a-zA-Z0-9_\-]{8,80}$/.test(trimmed);
+  return (
+    /^[A-Za-z0-9]{16,64}$/.test(trimmed) ||
+    /^meta_del_[a-zA-Z0-9_-]{8,64}$/.test(trimmed)
+  );
 }
 
 /**
@@ -290,7 +336,10 @@ async function loadDeletionsFromStore(): Promise<MetaDeletionRecord[]> {
       if (!error && Array.isArray(data) && data.length > 0) {
         memoryDeletionsCache = data.map((row) => ({
           confirmationCode: row.confirmation_code,
-          userId: row.user_id,
+          userIdHash:
+            row.user_id_hash ||
+            (row.user_id ? hashUserId(row.user_id) : hashUserId(row.confirmation_code)),
+          userId: row.user_id || null,
           status: (row.status as MetaDeletionStatus) || "completed",
           requestedAt: row.requested_at,
           completedAt: row.completed_at || null,
@@ -312,7 +361,12 @@ async function loadDeletionsFromStore(): Promise<MetaDeletionRecord[]> {
         const text = await data.text();
         const parsed = JSON.parse(text);
         if (Array.isArray(parsed)) {
-          memoryDeletionsCache = parsed;
+          memoryDeletionsCache = parsed.map((item) => ({
+            ...item,
+            userIdHash:
+              item.userIdHash ||
+              (item.userId ? hashUserId(item.userId) : hashUserId(item.confirmationCode)),
+          }));
           return memoryDeletionsCache;
         }
       }
@@ -324,7 +378,12 @@ async function loadDeletionsFromStore(): Promise<MetaDeletionRecord[]> {
     const content = await fs.readFile(DELETIONS_FILE, "utf-8");
     const parsed = JSON.parse(content);
     if (Array.isArray(parsed)) {
-      memoryDeletionsCache = parsed;
+      memoryDeletionsCache = parsed.map((item) => ({
+        ...item,
+        userIdHash:
+          item.userIdHash ||
+          (item.userId ? hashUserId(item.userId) : hashUserId(item.confirmationCode)),
+      }));
       return memoryDeletionsCache;
     }
   } catch {}
@@ -334,7 +393,12 @@ async function loadDeletionsFromStore(): Promise<MetaDeletionRecord[]> {
     const content = await fs.readFile(TMP_DELETIONS_FILE, "utf-8");
     const parsed = JSON.parse(content);
     if (Array.isArray(parsed)) {
-      memoryDeletionsCache = parsed;
+      memoryDeletionsCache = parsed.map((item) => ({
+        ...item,
+        userIdHash:
+          item.userIdHash ||
+          (item.userId ? hashUserId(item.userId) : hashUserId(item.confirmationCode)),
+      }));
       return memoryDeletionsCache;
     }
   } catch {}
@@ -393,7 +457,8 @@ export async function saveMetaDeletionRecord(
     try {
       await supabase.from("meta_data_deletion_requests").upsert({
         confirmation_code: record.confirmationCode,
-        user_id: record.userId,
+        user_id_hash: record.userIdHash,
+        user_id: record.userId || null,
         status: record.status,
         requested_at: record.requestedAt,
         completed_at: record.status === "completed" ? (record.completedAt || new Date().toISOString()) : null,
@@ -438,7 +503,10 @@ export async function updateMetaDeletionStatus(
  * Targets ONLY ELVAVEO Social Media Manager assets linked to this user.
  * Explicitly guards against modifying general ELVAVEO users, accounts, or inquiries.
  */
-async function executeScopedSocialMediaDeletion(userId: string): Promise<{
+async function executeScopedSocialMediaDeletion(
+  userId: string,
+  isTest = false
+): Promise<{
   deletedEntities: string[];
 }> {
   const deletedEntities: string[] = [];
@@ -448,6 +516,14 @@ async function executeScopedSocialMediaDeletion(userId: string): Promise<{
     await fs.unlink(userCachePath);
     deletedEntities.push("user_session_cache");
   } catch {}
+
+  if (isTest) {
+    deletedEntities.push("test_fixture_session");
+    console.log(
+      `[meta_data_deletion] Non-destructive test deletion executed for test identity: ${userId}. Production customer data untouched.`
+    );
+    return { deletedEntities };
+  }
 
   const userTokenPath = path.join(DATA_DIR, "social", `${userId}.json`);
   try {
@@ -510,83 +586,117 @@ export async function recordAndExecuteMetaDeletion(
   isRepeat: boolean;
   record: MetaDeletionRecord;
 }> {
-  const records = await loadDeletionsFromStore();
+  const userIdHash = hashUserId(userId);
 
-  // IDEMPOTENCY: Check if request for this user was already processed
-  const existing = records.find((r) => r.userId === userId);
-  if (existing) {
-    console.log(
-      `[meta_data_deletion] Idempotent hit: Deletion request for user_id ${userId} already processed. Re-using confirmation code ${existing.confirmationCode}.`
-    );
+  // In-flight concurrency lock: prevents simultaneous duplicate requests from racing
+  const pendingLock = inFlightDeletionLocks.get(userIdHash);
+  if (pendingLock) {
+    const existingResult = await pendingLock;
     return {
-      confirmationCode: existing.confirmationCode,
+      confirmationCode: existingResult.confirmationCode,
       isRepeat: true,
-      record: existing,
+      record: existingResult.record,
     };
   }
 
-  // Generate unique cryptographically secure confirmation code
-  const confirmationCode = `meta_del_${crypto.randomBytes(16).toString("hex")}`;
-  const now = new Date().toISOString();
+  const executionPromise = (async () => {
+    const records = await loadDeletionsFromStore();
 
-  let status: MetaDeletionStatus = "completed";
-  let deletedEntities: string[] = [];
-  let errorDetails: string | undefined;
-
-  try {
-    const result = await executeScopedSocialMediaDeletion(userId);
-    deletedEntities = result.deletedEntities;
-  } catch (err) {
-    status = "failed";
-    errorDetails = err instanceof Error ? err.message : String(err);
-    console.error(`[meta_data_deletion] Execution failed for user_id ${userId}:`, err);
-  }
-
-  const newRecord: MetaDeletionRecord = {
-    confirmationCode,
-    userId,
-    status,
-    requestedAt: now,
-    completedAt: status === "completed" ? now : null,
-    source: "meta_data_deletion_callback",
-    details: {
-      scope: "elvaveo_social_media_manager",
-      deletedEntities,
-      ...(errorDetails ? { error: errorDetails } : {}),
-      ...metadata,
-    },
-  };
-
-  records.unshift(newRecord);
-  await persistDeletionsToStore(records);
-
-  const supabase = getSupabaseClient();
-  if (supabase) {
-    try {
-      await supabase.from("meta_data_deletion_requests").insert([
-        {
-          confirmation_code: confirmationCode,
-          user_id: userId,
-          status,
-          requested_at: now,
-          completed_at: status === "completed" ? now : null,
-          details: newRecord.details,
-        },
-      ]);
-    } catch (err) {
-      console.warn("[meta_data_deletion] Supabase table insert warning:", err);
+    // IDEMPOTENCY: Check if request for this user was already processed
+    const existing = records.find(
+      (r) =>
+        (r.userIdHash && r.userIdHash === userIdHash) ||
+        (r.userId && r.userId === userId)
+    );
+    if (existing) {
+      console.log(
+        `[meta_data_deletion] Idempotent hit: Deletion request for user hash ${userIdHash.substring(0, 8)}... already processed. Re-using confirmation code ${existing.confirmationCode}.`
+      );
+      return {
+        confirmationCode: existing.confirmationCode,
+        isRepeat: true,
+        record: existing,
+      };
     }
+
+    // Generate unique strictly alphanumeric confirmation code (uppercase base36)
+    const confirmationCode = generateAlphanumericConfirmationCode(32);
+    const now = new Date().toISOString();
+
+    let status: MetaDeletionStatus = "completed";
+    let deletedEntities: string[] = [];
+    let errorDetails: string | undefined;
+
+    const isTest = isTestIdentity(userId);
+
+    try {
+      const result = await executeScopedSocialMediaDeletion(userId, isTest);
+      deletedEntities = result.deletedEntities;
+    } catch (err) {
+      status = "failed";
+      errorDetails = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[meta_data_deletion] Execution failed for user hash ${userIdHash.substring(0, 8)}...:`,
+        err
+      );
+    }
+
+    const newRecord: MetaDeletionRecord = {
+      confirmationCode,
+      userIdHash,
+      // Data minimization: do not retain raw userId in permanent storage
+      userId: null,
+      status,
+      requestedAt: now,
+      completedAt: status === "completed" ? now : null,
+      source: "meta_data_deletion_callback",
+      details: {
+        scope: isTest ? "elvaveo_social_media_manager_test" : "elvaveo_social_media_manager",
+        deletedEntities,
+        isTestRequest: isTest,
+        ...(errorDetails ? { error: errorDetails } : {}),
+        ...metadata,
+      },
+    };
+
+    records.unshift(newRecord);
+    await persistDeletionsToStore(records);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from("meta_data_deletion_requests").insert([
+          {
+            confirmation_code: confirmationCode,
+            user_id_hash: userIdHash,
+            status,
+            requested_at: now,
+            completed_at: status === "completed" ? now : null,
+            details: newRecord.details,
+          },
+        ]);
+      } catch (err) {
+        console.warn("[meta_data_deletion] Supabase table insert warning:", err);
+      }
+    }
+
+    console.log(
+      `[meta_data_deletion] Processed deletion for user hash ${userIdHash.substring(0, 8)}... with status ${status}. Confirmation code: ${confirmationCode}`
+    );
+
+    return {
+      confirmationCode,
+      isRepeat: false,
+      record: newRecord,
+    };
+  })();
+
+  inFlightDeletionLocks.set(userIdHash, executionPromise);
+  try {
+    return await executionPromise;
+  } finally {
+    inFlightDeletionLocks.delete(userIdHash);
   }
-
-  console.log(
-    `[meta_data_deletion] Processed deletion for user_id ${userId} with status ${status}. Confirmation code: ${confirmationCode}`
-  );
-
-  return {
-    confirmationCode,
-    isRepeat: false,
-    record: newRecord,
-  };
 }
 
 /**
@@ -616,7 +726,10 @@ export async function getMetaDeletionRecord(
       if (!error && data) {
         return {
           confirmationCode: data.confirmation_code,
-          userId: data.user_id,
+          userIdHash:
+            data.user_id_hash ||
+            (data.user_id ? hashUserId(data.user_id) : hashUserId(data.confirmation_code)),
+          userId: data.user_id || null,
           status: (data.status as MetaDeletionStatus) || "completed",
           requestedAt: data.requested_at,
           completedAt: data.completed_at || null,
@@ -814,7 +927,7 @@ export async function handleMetaDataDeletionGet(
         contentType: "text/html; charset=utf-8",
         body: renderUnifiedStatusPageHtml({
           code,
-          error: "Invalid confirmation code format. Confirmation codes contain only letters, numbers, hyphens, and underscores (8-80 characters).",
+          error: "Invalid confirmation code format. Confirmation codes must be alphanumeric (16-64 characters).",
         }),
       };
     }
@@ -824,7 +937,7 @@ export async function handleMetaDataDeletionGet(
       contentType: "application/json",
       body: {
         success: false,
-        error: "Invalid confirmation code format. Confirmation codes contain only letters, numbers, hyphens, and underscores (8-80 characters).",
+        error: "Invalid confirmation code format. Confirmation codes must be alphanumeric (16-64 characters).",
       },
     };
   }
@@ -1221,7 +1334,7 @@ export function renderUnifiedStatusPageHtml(options: {
               type="text"
               id="code-input"
               name="code"
-              placeholder="meta_del_..."
+              placeholder="Enter confirmation code (e.g. 7F3A9C8D...)"
               value="${escapedCode}"
               autocomplete="off"
               spellcheck="false"

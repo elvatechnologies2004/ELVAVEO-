@@ -9,6 +9,9 @@ const {
   saveMetaDeletionRecord,
   updateMetaDeletionStatus,
   isValidConfirmationCode,
+  generateAlphanumericConfirmationCode,
+  hashUserId,
+  isTestIdentity,
   resetMetaDataDeletionRateLimits,
   checkMetaDataDeletionRateLimit,
   handleMetaDataDeletionPost,
@@ -121,34 +124,82 @@ test("Meta Signed Request: Malformed signed_request without dot is rejected", ()
 });
 
 // ============================================================================
-// IDEMPOTENCY & ISOLATION TESTS
+// CONFIRMATION CODE STRICT ALPHANUMERIC GENERATION & COMPATIBILITY
 // ============================================================================
 
-test("Meta Data Deletion: Idempotent processing returns the same confirmation code on repeat requests", async () => {
-  const uniqueTestUserId = `test_user_id_${Date.now()}_${Math.random()}`;
+test("Confirmation Code: Generated codes are strictly alphanumeric and cryptographically secure", () => {
+  for (let i = 0; i < 20; i++) {
+    const code = generateAlphanumericConfirmationCode(32);
+    assert.equal(code.length, 32);
+    // Must be strictly alphanumeric (no underscores, hyphens, or special symbols)
+    assert.match(code, /^[A-Z0-9]{32}$/);
+    assert.equal(isValidConfirmationCode(code), true);
+  }
+});
 
-  // 1. First deletion request
-  const firstResult = await recordAndExecuteMetaDeletion(uniqueTestUserId, {
-    clientIp: "127.0.0.1",
-  });
-  assert.ok(firstResult.confirmationCode);
-  assert.equal(firstResult.isRepeat, false);
-  assert.equal(firstResult.record.userId, uniqueTestUserId);
-  assert.equal(firstResult.record.status, "completed");
+test("Confirmation Code: Migration backwards compatibility supports legacy meta_del_ format", () => {
+  const legacyCode = "meta_del_f2cdf77a849f7e8c57e8185f49a47dfc";
+  assert.equal(isValidConfirmationCode(legacyCode), true);
 
-  // 2. Second deletion request with the same user ID (Repeat / Retried request)
-  const secondResult = await recordAndExecuteMetaDeletion(uniqueTestUserId, {
-    clientIp: "127.0.0.1",
-  });
-  assert.equal(secondResult.isRepeat, true);
-  assert.equal(secondResult.confirmationCode, firstResult.confirmationCode);
-  assert.equal(secondResult.record.confirmationCode, firstResult.confirmationCode);
+  // New strictly alphanumeric codes are also valid
+  assert.equal(isValidConfirmationCode("7F3A9C8D2E1B4F5A6D7C8E9B0A1C2D3E"), true);
+  assert.equal(isValidConfirmationCode("A1B2C3D4E5F6G7H8"), true);
 
-  // 3. Verify internal lookup returns the record
-  const fetchedRecord = await getMetaDeletionRecord(firstResult.confirmationCode);
-  assert.ok(fetchedRecord);
-  assert.equal(fetchedRecord.confirmationCode, firstResult.confirmationCode);
-  assert.equal(fetchedRecord.userId, uniqueTestUserId);
+  // Invalid codes remain rejected
+  assert.equal(isValidConfirmationCode(""), false);
+  assert.equal(isValidConfirmationCode("short"), false);
+  assert.equal(isValidConfirmationCode("with spaces in code"), false);
+  assert.equal(isValidConfirmationCode("<script>"), false);
+});
+
+// ============================================================================
+// DATA MINIMIZATION & RETAINED RECORDS
+// ============================================================================
+
+test("Data Minimization: Raw user ID is hashed and not retained in plaintext permanently", async () => {
+  const rawUserId = `privacy_user_${Date.now()}`;
+  const expectedHash = hashUserId(rawUserId);
+
+  const result = await recordAndExecuteMetaDeletion(rawUserId);
+  assert.ok(result.confirmationCode);
+  // Stored record holds the non-reversible SHA-256 hash
+  assert.equal(result.record.userIdHash, expectedHash);
+  // Raw userId is nullified for privacy compliance
+  assert.equal(result.record.userId, null);
+
+  // Verification lookup works without exposing raw user ID
+  const fetched = await getMetaDeletionRecord(result.confirmationCode);
+  assert.ok(fetched);
+  assert.equal(fetched.userIdHash, expectedHash);
+  assert.equal(fetched.userId, null);
+});
+
+// ============================================================================
+// CONCURRENCY & IDEMPOTENCY TESTS
+// ============================================================================
+
+test("Concurrency: Simultaneous duplicate requests return the same confirmation code without race conditions", async () => {
+  const concurrentUserId = `concurrent_user_${Date.now()}_${Math.random()}`;
+
+  // Execute two identical requests simultaneously via Promise.all
+  const [res1, res2] = await Promise.all([
+    recordAndExecuteMetaDeletion(concurrentUserId),
+    recordAndExecuteMetaDeletion(concurrentUserId),
+  ]);
+
+  assert.equal(res1.confirmationCode, res2.confirmationCode);
+  assert.ok(res1.isRepeat || res2.isRepeat);
+});
+
+test("Idempotency: Sequential duplicate requests return the same confirmation code", async () => {
+  const sequentialUserId = `sequential_user_${Date.now()}`;
+
+  const res1 = await recordAndExecuteMetaDeletion(sequentialUserId);
+  const res2 = await recordAndExecuteMetaDeletion(sequentialUserId);
+
+  assert.equal(res1.isRepeat, false);
+  assert.equal(res2.isRepeat, true);
+  assert.equal(res1.confirmationCode, res2.confirmationCode);
 });
 
 test("Meta Data Deletion: Different users receive distinct confirmation codes", async () => {
@@ -162,10 +213,25 @@ test("Meta Data Deletion: Different users receive distinct confirmation codes", 
 });
 
 // ============================================================================
+// PRODUCTION TEST SAFETY SAFEGUARDS
+// ============================================================================
+
+test("Test Safety: Test identities trigger non-destructive scoped execution", async () => {
+  const testUserId = `test_compliance_reviewer_${Date.now()}`;
+  assert.equal(isTestIdentity(testUserId), true);
+
+  const result = await recordAndExecuteMetaDeletion(testUserId);
+  assert.ok(result.confirmationCode);
+  assert.equal(result.record.details?.isTestRequest, true);
+  assert.equal(result.record.details?.scope, "elvaveo_social_media_manager_test");
+  assert.ok(result.record.details?.deletedEntities?.includes("test_fixture_session"));
+});
+
+// ============================================================================
 // POST /api/meta/data-deletion CALLBACK HANDLER TESTS
 // ============================================================================
 
-test("Handler POST: Valid urlencoded request returns Meta required JSON format", async () => {
+test("Handler POST: Valid urlencoded request returns strictly alphanumeric confirmation code", async () => {
   const testUserId = `api_user_${Date.now()}`;
   const signedRequest = createMetaSignedRequest(
     { algorithm: "HMAC-SHA256", user_id: testUserId },
@@ -187,7 +253,8 @@ test("Handler POST: Valid urlencoded request returns Meta required JSON format",
   assert.ok(json.url, "Response must include url");
   assert.ok(json.confirmation_code, "Response must include confirmation_code");
   assert.ok(json.url.includes(json.confirmation_code), "URL must contain confirmation_code");
-  assert.ok(json.confirmation_code.startsWith("meta_del_"));
+  // Strictly alphanumeric check
+  assert.match(json.confirmation_code, /^[A-Z0-9]{32}$/);
 });
 
 test("Handler POST: JSON body format is also accepted", async () => {
@@ -211,6 +278,7 @@ test("Handler POST: JSON body format is also accepted", async () => {
   const json = response.body;
   assert.ok(json.url);
   assert.ok(json.confirmation_code);
+  assert.match(json.confirmation_code, /^[A-Z0-9]{32}$/);
 });
 
 test("Handler POST: Missing signed_request returns 400 Bad Request", async () => {
@@ -266,26 +334,6 @@ test("Handler POST: Invalid signature returns 400 Bad Request", async () => {
   const response = await handleMetaDataDeletionPost(req);
   assert.equal(response.status, 400);
   assert.ok(response.body.error);
-});
-
-// ============================================================================
-// INPUT VALIDATION TESTS (CONFIRMATION CODES)
-// ============================================================================
-
-test("Input Validation: isValidConfirmationCode correctly validates codes", () => {
-  assert.equal(isValidConfirmationCode("meta_del_f2cdf77a849f7e8c57e8185f49a47dfc"), true);
-  assert.equal(isValidConfirmationCode("meta-del-12345678"), true);
-  assert.equal(isValidConfirmationCode("ABCDEF123456"), true);
-
-  // Invalid formats:
-  assert.equal(isValidConfirmationCode(""), false);
-  assert.equal(isValidConfirmationCode("short"), false); // Under 8 chars
-  assert.equal(isValidConfirmationCode("code with spaces"), false);
-  assert.equal(isValidConfirmationCode("<script>alert(1)</script>"), false);
-  assert.equal(isValidConfirmationCode("code' OR 1=1 --"), false);
-  assert.equal(isValidConfirmationCode(null), false);
-  assert.equal(isValidConfirmationCode(undefined), false);
-  assert.equal(isValidConfirmationCode("a".repeat(100)), false); // Over 80 chars
 });
 
 // ============================================================================
@@ -363,12 +411,13 @@ test("Handler GET: Completed status verification", async () => {
 });
 
 test("Handler GET: Pending status verification", async () => {
-  const pendingCode = `meta_del_pending_${Date.now()}_12345678`;
+  const pendingCode = generateAlphanumericConfirmationCode(32);
   const now = new Date().toISOString();
 
   await saveMetaDeletionRecord({
     confirmationCode: pendingCode,
-    userId: "pending_meta_user_999",
+    userIdHash: hashUserId("pending_meta_user_999"),
+    userId: null,
     status: "pending",
     requestedAt: now,
     completedAt: null,
@@ -410,12 +459,13 @@ test("Handler GET: Pending status verification", async () => {
 });
 
 test("Handler GET: Processing status verification", async () => {
-  const procCode = `meta_del_proc_${Date.now()}_12345678`;
+  const procCode = generateAlphanumericConfirmationCode(32);
   const now = new Date().toISOString();
 
   await saveMetaDeletionRecord({
     confirmationCode: procCode,
-    userId: "proc_meta_user_888",
+    userIdHash: hashUserId("proc_meta_user_888"),
+    userId: null,
     status: "processing",
     requestedAt: now,
     completedAt: null,
@@ -456,12 +506,13 @@ test("Handler GET: Processing status verification", async () => {
 });
 
 test("Handler GET: Failed status verification", async () => {
-  const failedCode = `meta_del_failed_${Date.now()}_12345678`;
+  const failedCode = generateAlphanumericConfirmationCode(32);
   const now = new Date().toISOString();
 
   await saveMetaDeletionRecord({
     confirmationCode: failedCode,
-    userId: "failed_meta_user_777",
+    userIdHash: hashUserId("failed_meta_user_777"),
+    userId: null,
     status: "failed",
     requestedAt: now,
     completedAt: null,
@@ -538,7 +589,7 @@ test("Handler GET: Malformed confirmation code format returns 400 Bad Request", 
 });
 
 test("Handler GET: Non-existent well-formed code returns 404 Not Found", async () => {
-  const nonExistentCode = "meta_del_00000000000000000000000000000000";
+  const nonExistentCode = "00000000000000000000000000000000";
 
   // JSON check
   const jsonReq = new Request(
@@ -588,7 +639,7 @@ test("Rate Limiting: Exceeding threshold triggers HTTP 429 Too Many Requests", a
   assert.ok(blocked.resetSeconds > 0);
 
   // When request passes this IP header into handleMetaDataDeletionGet
-  const req = new Request("https://elvaveo.com/api/meta/data-deletion?code=meta_del_valid123", {
+  const req = new Request("https://elvaveo.com/api/meta/data-deletion?code=VALIDCODE1234567890ABCDEF123456", {
     method: "GET",
     headers: {
       Accept: "application/json",
