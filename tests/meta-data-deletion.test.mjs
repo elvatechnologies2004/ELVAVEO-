@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "crypto";
 
 const {
   parseAndVerifyMetaSignedRequest,
@@ -11,6 +12,9 @@ const {
   isValidConfirmationCode,
   generateAlphanumericConfirmationCode,
   hashUserId,
+  computeUserHash,
+  getCandidateUserHashes,
+  matchesUserId,
   isTestIdentity,
   resetMetaDataDeletionRateLimits,
   checkMetaDataDeletionRateLimit,
@@ -210,6 +214,155 @@ test("Meta Data Deletion: Different users receive distinct confirmation codes", 
   const resB = await recordAndExecuteMetaDeletion(userB);
 
   assert.notEqual(resA.confirmationCode, resB.confirmationCode);
+});
+
+test("Expired Lease Recovery: Expired processing lease is reclaimed and completed with same confirmation code", async () => {
+  const expiredUserId = `expired_lease_user_${Date.now()}`;
+  const expiredCode = generateAlphanumericConfirmationCode(32);
+  const userHash = hashUserId(expiredUserId);
+
+  // Seed an expired lease (lockedUntil is 10 minutes in the past)
+  await saveMetaDeletionRecord({
+    confirmationCode: expiredCode,
+    userIdHash: userHash,
+    userId: null,
+    status: "processing",
+    requestedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    completedAt: null,
+    lockedUntil: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    source: "crashed_worker",
+    details: { scope: "elvaveo_social_media_manager" },
+  });
+
+  // Next callback arrives for that user -> should reclaim lease and finish
+  const res = await recordAndExecuteMetaDeletion(expiredUserId);
+
+  // Must reuse the exact same confirmation code
+  assert.equal(res.confirmationCode, expiredCode);
+  assert.equal(res.record.status, "completed");
+  assert.equal(res.record.lockedUntil, null);
+  assert.ok(res.record.completedAt);
+});
+
+test("Failed Deletion Retry: Failed deletion request is safely reclaimed and successfully completed", async () => {
+  const failedUserId = `failed_retry_user_${Date.now()}`;
+  const failedCode = generateAlphanumericConfirmationCode(32);
+  const userHash = hashUserId(failedUserId);
+
+  // Seed a failed deletion record
+  await saveMetaDeletionRecord({
+    confirmationCode: failedCode,
+    userIdHash: userHash,
+    userId: null,
+    status: "failed",
+    requestedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    completedAt: null,
+    lockedUntil: null,
+    source: "meta_callback",
+    details: { error: "Simulated prior downstream API failure" },
+  });
+
+  // Retry callback arrives -> should reclaim the failed request and retry
+  const res = await recordAndExecuteMetaDeletion(failedUserId);
+
+  assert.equal(res.confirmationCode, failedCode);
+  assert.equal(res.record.status, "completed");
+  assert.ok(res.record.completedAt);
+});
+
+test("Hash Versioning: HMAC-SHA256 returns explicit v2 version and throws if secrets missing in production", () => {
+  const testId = "meta_test_user_hash_version";
+
+  // When secret is available: returns v2-hmac-sha256
+  const hashInfo = computeUserHash(testId, TEST_SECRET);
+  assert.equal(hashInfo.version, "v2-hmac-sha256");
+  assert.equal(hashInfo.hash.length, 64);
+
+  // In production, missing secrets must throw explicitly rather than silently degrading
+  const originalEnv = process.env.NODE_ENV;
+  const originalAppSecret = process.env.META_APP_SECRET;
+  const originalHashSecret = process.env.META_DELETION_HASH_SECRET;
+
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.META_APP_SECRET;
+    delete process.env.META_DELETION_HASH_SECRET;
+
+    assert.throws(
+      () => computeUserHash(testId),
+      /Server misconfiguration: META_DELETION_HASH_SECRET or META_APP_SECRET is required/
+    );
+  } finally {
+    process.env.NODE_ENV = originalEnv;
+    process.env.META_APP_SECRET = originalAppSecret;
+    if (originalHashSecret) process.env.META_DELETION_HASH_SECRET = originalHashSecret;
+  }
+});
+
+test("Key Rotation: Matches previous secret during rotation grace period without orphaning records", async () => {
+  const rotationUserId = `rotation_user_${Date.now()}`;
+  const oldSecret = "old_legacy_secret_key_987654321";
+  const newSecret = "new_hardened_secret_key_123456789";
+
+  // Record created under old secret
+  const oldHash = crypto.createHmac("sha256", oldSecret).update(rotationUserId).digest("hex");
+  const oldCode = generateAlphanumericConfirmationCode(32);
+
+  await saveMetaDeletionRecord({
+    confirmationCode: oldCode,
+    userIdHash: oldHash,
+    hashVersion: "v2-hmac-sha256-rotated",
+    userId: null,
+    status: "completed",
+    requestedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    source: "meta_callback",
+  });
+
+  // System is rotated to newSecret as active, and oldSecret as previous
+  const originalHashSecret = process.env.META_DELETION_HASH_SECRET;
+  const originalPrevSecret = process.env.META_DELETION_HASH_SECRET_PREVIOUS;
+
+  try {
+    process.env.META_DELETION_HASH_SECRET = newSecret;
+    process.env.META_DELETION_HASH_SECRET_PREVIOUS = oldSecret;
+
+    // Incoming callback for the user must match the old record and return oldCode
+    const res = await recordAndExecuteMetaDeletion(rotationUserId);
+    assert.equal(res.confirmationCode, oldCode);
+    assert.equal(res.isRepeat, true);
+  } finally {
+    process.env.META_DELETION_HASH_SECRET = originalHashSecret;
+    process.env.META_DELETION_HASH_SECRET_PREVIOUS = originalPrevSecret;
+  }
+});
+
+test("Migration Preservation: Historical unkeyed v1-sha256 records remain resolvable without data loss", async () => {
+  const legacyUserId = `legacy_v1_user_${Date.now()}`;
+  const legacySha256 = crypto.createHash("sha256").update(legacyUserId).digest("hex");
+  const legacyCode = "meta_del_f8e7d6c5b4a392011029384756abcdef";
+
+  await saveMetaDeletionRecord({
+    confirmationCode: legacyCode,
+    userIdHash: legacySha256,
+    hashVersion: "v1-sha256",
+    userId: null,
+    status: "completed",
+    requestedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    source: "meta_callback_legacy",
+  });
+
+  // Verify that record is identified as an idempotent hit under current v2 system
+  const res = await recordAndExecuteMetaDeletion(legacyUserId);
+  assert.equal(res.confirmationCode, legacyCode);
+  assert.equal(res.isRepeat, true);
+
+  // Status check lookup also works
+  const record = await getMetaDeletionRecord(legacyCode);
+  assert.ok(record);
+  assert.equal(record.confirmationCode, legacyCode);
+  assert.equal(record.status, "completed");
 });
 
 // ============================================================================
