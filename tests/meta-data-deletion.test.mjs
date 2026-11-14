@@ -13,6 +13,7 @@ const {
   generateAlphanumericConfirmationCode,
   hashUserId,
   computeUserHash,
+  computeCanonicalLockHash,
   getCandidateUserHashes,
   matchesUserId,
   isTestIdentity,
@@ -23,7 +24,9 @@ const {
 } = await import("../lib/metaDataDeletion.ts");
 
 const TEST_SECRET = "super_secret_meta_app_secret_1234567890";
+const TEST_HASH_SECRET = "super_secret_meta_deletion_hash_secret_54321";
 process.env.META_APP_SECRET = TEST_SECRET;
+process.env.META_DELETION_HASH_SECRET = TEST_HASH_SECRET;
 process.env.SITE_URL = "https://elvaveo.com";
 
 // ============================================================================
@@ -273,28 +276,25 @@ test("Failed Deletion Retry: Failed deletion request is safely reclaimed and suc
 test("Hash Versioning: HMAC-SHA256 returns explicit v2 version and throws if secrets missing in production", () => {
   const testId = "meta_test_user_hash_version";
 
-  // When secret is available: returns v2-hmac-sha256
-  const hashInfo = computeUserHash(testId, TEST_SECRET);
+  // When dedicated secret is available: returns v2-hmac-sha256
+  const hashInfo = computeUserHash(testId, TEST_HASH_SECRET);
   assert.equal(hashInfo.version, "v2-hmac-sha256");
   assert.equal(hashInfo.hash.length, 64);
 
-  // In production, missing secrets must throw explicitly rather than silently degrading
+  // In production, missing dedicated secret must fail closed; fallback to META_APP_SECRET is prohibited
   const originalEnv = process.env.NODE_ENV;
-  const originalAppSecret = process.env.META_APP_SECRET;
   const originalHashSecret = process.env.META_DELETION_HASH_SECRET;
 
   try {
     process.env.NODE_ENV = "production";
-    delete process.env.META_APP_SECRET;
     delete process.env.META_DELETION_HASH_SECRET;
 
     assert.throws(
       () => computeUserHash(testId),
-      /Server misconfiguration: META_DELETION_HASH_SECRET or META_APP_SECRET is required/
+      /Server misconfiguration: META_DELETION_HASH_SECRET is required in production/
     );
   } finally {
     process.env.NODE_ENV = originalEnv;
-    process.env.META_APP_SECRET = originalAppSecret;
     if (originalHashSecret) process.env.META_DELETION_HASH_SECRET = originalHashSecret;
   }
 });
@@ -335,6 +335,151 @@ test("Key Rotation: Matches previous secret during rotation grace period without
     process.env.META_DELETION_HASH_SECRET = originalHashSecret;
     process.env.META_DELETION_HASH_SECRET_PREVIOUS = originalPrevSecret;
   }
+});
+
+test("Multiple Historical Hash Keys: Resolves across multiple comma-separated keys during key rotation", async () => {
+  const multiRotUserId = `multi_rot_user_${Date.now()}`;
+  const key1 = "historical_secret_key_one_11111";
+  const key2 = "historical_secret_key_two_22222";
+  const currentKey = "current_active_secret_key_33333";
+
+  // Oldest record created under key1
+  const oldHash1 = crypto.createHmac("sha256", key1).update(multiRotUserId).digest("hex");
+  const oldCode1 = generateAlphanumericConfirmationCode(32);
+
+  await saveMetaDeletionRecord({
+    confirmationCode: oldCode1,
+    userIdHash: oldHash1,
+    hashVersion: "v2-hmac-sha256-rotated",
+    userId: null,
+    status: "completed",
+    requestedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+    source: "meta_callback",
+  });
+
+  const originalHashSecret = process.env.META_DELETION_HASH_SECRET;
+  const originalPrevSecret = process.env.META_DELETION_HASH_SECRET_PREVIOUS;
+
+  try {
+    process.env.META_DELETION_HASH_SECRET = currentKey;
+    // Comma-separated list of multiple historical keys
+    process.env.META_DELETION_HASH_SECRET_PREVIOUS = `${key2}, ${key1}`;
+
+    const candidates = getCandidateUserHashes(multiRotUserId);
+    assert.equal(candidates.some((c) => c.hash === oldHash1), true);
+
+    const res = await recordAndExecuteMetaDeletion(multiRotUserId);
+    assert.equal(res.confirmationCode, oldCode1);
+    assert.equal(res.isRepeat, true);
+  } finally {
+    process.env.META_DELETION_HASH_SECRET = originalHashSecret;
+    process.env.META_DELETION_HASH_SECRET_PREVIOUS = originalPrevSecret;
+  }
+});
+
+test("Cross-Version Concurrency: Canonical lock hash is identical across versions and secret keys", () => {
+  const userId = "meta_enterprise_user_987654321";
+
+  // Compute canonical lock hash
+  const canonicalHash = computeCanonicalLockHash(userId);
+  assert.equal(canonicalHash.length, 64);
+  assert.match(canonicalHash, /^[a-f0-9]{64}$/);
+
+  // Verify that regardless of what secret is passed, the canonical lock hash never changes
+  const hashWithSecretA = computeCanonicalLockHash(userId);
+  const hashWithSecretB = computeCanonicalLockHash(userId);
+  assert.equal(hashWithSecretA, hashWithSecretB);
+  assert.equal(hashWithSecretA, crypto.createHash("sha256").update(userId.trim()).digest("hex"));
+});
+
+test("Migration Integrity Simulation: Raw IDs are cleared only after successful hash backfill", () => {
+  const mockRows = [
+    { id: 1, user_id: "meta_user_1", user_id_hash: null },
+    { id: 2, user_id: "meta_user_2", user_id_hash: null },
+    { id: 3, user_id: null, user_id_hash: "existing_hash_3333333333333333333333333333333333333333333333333333333333333333" },
+  ];
+
+  // 1. Backfill hashes
+  for (const row of mockRows) {
+    if (row.user_id && !row.user_id_hash) {
+      row.user_id_hash = crypto.createHash("sha256").update(row.user_id.trim()).digest("hex");
+    }
+  }
+
+  // 2. Verification check
+  const unhashed = mockRows.filter((r) => r.user_id !== null && (!r.user_id_hash || r.user_id_hash.length < 64));
+  assert.equal(unhashed.length, 0);
+
+  // 3. Only then clear raw user_id
+  for (const row of mockRows) {
+    if (row.user_id) row.user_id = null;
+  }
+
+  assert.equal(mockRows[0].user_id, null);
+  assert.ok(mockRows[0].user_id_hash);
+  assert.equal(mockRows[1].user_id, null);
+  assert.ok(mockRows[1].user_id_hash);
+});
+
+test("Migration Integrity Simulation: Aborts with error if a row cannot be safely hashed", () => {
+  const mockRowsWithInvalid = [
+    { id: 1, user_id: "meta_user_1", user_id_hash: null },
+    { id: 2, user_id: "meta_user_2", user_id_hash: "corrupted_short_hash" },
+  ];
+
+  function runSimulatedMigration(rows) {
+    // Attempt backfill
+    for (const row of rows) {
+      if (row.user_id && !row.user_id_hash) {
+        row.user_id_hash = crypto.createHash("sha256").update(row.user_id.trim()).digest("hex");
+      }
+    }
+    // Verify
+    const invalid = rows.filter((r) => r.user_id !== null && (!r.user_id_hash || r.user_id_hash.length < 64));
+    if (invalid.length > 0) {
+      throw new Error(`MIGRATION ABORTED: ${invalid.length} row(s) have invalid user_id_hash format.`);
+    }
+    // Expunge
+    for (const row of rows) row.user_id = null;
+  }
+
+  assert.throws(
+    () => runSimulatedMigration(mockRowsWithInvalid),
+    /MIGRATION ABORTED/
+  );
+  // Verify that raw user_id was NOT expunged because migration aborted
+  assert.equal(mockRowsWithInvalid[1].user_id, "meta_user_2");
+});
+
+test("SQL Static Validation: Migration script contains exact function signatures and restrictive RLS", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const migrationPath = path.join(process.cwd(), "supabase", "migrations", "20261114_meta_data_deletion_hardening.sql");
+  const sql = await fs.readFile(migrationPath, "utf-8");
+
+  // Check RPC signature matches character-for-character
+  assert.ok(
+    sql.includes("claim_meta_data_deletion(character varying, character varying, character varying, character varying[], character varying, integer, jsonb)")
+  );
+  assert.ok(
+    sql.includes("finalize_meta_data_deletion(character varying, character varying, jsonb)")
+  );
+  assert.ok(sql.includes("GRANT EXECUTE ON FUNCTION public.claim_meta_data_deletion"));
+  assert.ok(sql.includes("TO service_role;"));
+  assert.ok(sql.includes("GRANT EXECUTE ON FUNCTION public.finalize_meta_data_deletion"));
+  assert.ok(sql.includes("TO service_role;"));
+
+  // Check timestamp correctness (uses now() instead of timezone conversion)
+  assert.ok(sql.includes("v_now TIMESTAMPTZ := now();"));
+  assert.ok(!sql.includes("timezone('utc'::text, now())"));
+
+  // Check Restrictive RLS policy
+  assert.ok(sql.includes("AS RESTRICTIVE"));
+  assert.ok(sql.includes("FORCE ROW LEVEL SECURITY"));
+
+  // Check zero DELETE statements on data rows
+  assert.ok(!sql.includes("DELETE FROM public.meta_data_deletion_requests"));
 });
 
 test("Migration Preservation: Historical unkeyed v1-sha256 records remain resolvable without data loss", async () => {

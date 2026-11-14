@@ -158,17 +158,23 @@ export interface UserHashInfo {
 }
 
 /**
+ * Computes the immutable canonical lock hash for a Meta identity (unkeyed SHA-256).
+ * This hash NEVER changes across secret rotations or application versions, guaranteeing
+ * that all versions and instances acquire the exact same advisory transaction lock.
+ */
+export function computeCanonicalLockHash(userId: string): string {
+  return crypto.createHash("sha256").update(userId.trim()).digest("hex");
+}
+
+/**
  * Computes a keyed non-reversible HMAC-SHA256 hash and version for a Meta user ID.
  * Prevents dictionary and rainbow-table precomputation against numeric Meta ASUIDs.
- * Uses dedicated META_DELETION_HASH_SECRET (or falls back securely to server META_APP_SECRET).
- * Fails explicitly in production if required secrets are missing, preventing silent degradation.
+ * Strictly requires dedicated META_DELETION_HASH_SECRET in production.
+ * Fails closed in production if dedicated secret is missing; fallback to META_APP_SECRET is prohibited.
  */
 export function computeUserHash(userId: string, secretOverride?: string): UserHashInfo {
   const cleanId = userId.trim();
-  const secret =
-    secretOverride ||
-    process.env.META_DELETION_HASH_SECRET?.trim() ||
-    process.env.META_APP_SECRET?.trim();
+  const secret = secretOverride || process.env.META_DELETION_HASH_SECRET?.trim();
 
   if (secret) {
     return {
@@ -177,10 +183,10 @@ export function computeUserHash(userId: string, secretOverride?: string): UserHa
     };
   }
 
-  // Prevent silent algorithm degradation in production
+  // Strictly require dedicated secret in production; fail closed without fallback
   if (process.env.NODE_ENV === "production") {
     throw new Error(
-      "Server misconfiguration: META_DELETION_HASH_SECRET or META_APP_SECRET is required for Meta data deletion hashing"
+      "Server misconfiguration: META_DELETION_HASH_SECRET is required in production for Meta data deletion hashing. Fallback to META_APP_SECRET is prohibited."
     );
   }
 
@@ -201,7 +207,7 @@ export function hashUserId(userId: string, secretOverride?: string): string {
 /**
  * Returns all candidate hash representations for a user ID to support:
  * 1. Current primary key (v2-hmac-sha256)
- * 2. Previous key during rotation (v2-hmac-sha256-rotated via META_DELETION_HASH_SECRET_PREVIOUS)
+ * 2. Previous keys during rotation (supports multiple comma-separated keys via META_DELETION_HASH_SECRET_PREVIOUS)
  * 3. Historical unkeyed SHA-256 records (v1-sha256)
  */
 export function getCandidateUserHashes(
@@ -216,17 +222,26 @@ export function getCandidateUserHashes(
     const primary = computeUserHash(cleanId, secretOverride);
     candidates.push(primary);
   } catch (err) {
-    // If running in production without secret, will throw here
+    // If running in production without dedicated secret, will throw here
     throw err;
   }
 
-  // 2. Previous secret for smooth key rotation without orphaning records
-  const previousSecret = process.env.META_DELETION_HASH_SECRET_PREVIOUS?.trim();
-  if (previousSecret && previousSecret !== secretOverride) {
-    candidates.push({
-      hash: crypto.createHmac("sha256", previousSecret).update(cleanId).digest("hex"),
-      version: "v2-hmac-sha256-rotated",
-    });
+  // 2. Previous secrets for smooth key rotation (supports multiple comma-separated keys)
+  const previousSecretsStr = process.env.META_DELETION_HASH_SECRET_PREVIOUS?.trim();
+  if (previousSecretsStr) {
+    const prevSecrets = previousSecretsStr.split(",").map((s) => s.trim()).filter(Boolean);
+    const activeSecret = secretOverride || process.env.META_DELETION_HASH_SECRET?.trim();
+    for (const prevSec of prevSecrets) {
+      if (prevSec && prevSec !== activeSecret) {
+        const hmac = crypto.createHmac("sha256", prevSec).update(cleanId).digest("hex");
+        if (!candidates.some((c) => c.hash === hmac)) {
+          candidates.push({
+            hash: hmac,
+            version: "v2-hmac-sha256-rotated",
+          });
+        }
+      }
+    }
   }
 
   // 3. Legacy unkeyed SHA-256 (v1) for records created prior to HMAC hardening
@@ -736,7 +751,9 @@ export async function recordAndExecuteMetaDeletion(
 
     if (supabase) {
       try {
+        const canonicalLockHash = computeCanonicalLockHash(userId);
         const { data, error } = await supabase.rpc("claim_meta_data_deletion", {
+          p_canonical_lock_hash: canonicalLockHash,
           p_primary_user_id_hash: primaryHashInfo.hash,
           p_hash_version: primaryHashInfo.version,
           p_candidate_hashes: candidateHashes.map((c) => c.hash),
