@@ -20,6 +20,7 @@ export interface MetaDeletionRecord {
   status: MetaDeletionStatus;
   requestedAt: string;
   completedAt?: string | null;
+  lockedUntil?: string | null;
   source: string;
   details?: Record<string, unknown>;
 }
@@ -151,11 +152,45 @@ export function generateAlphanumericConfirmationCode(length = 32): string {
 }
 
 /**
- * Creates a non-reversible cryptographic SHA-256 hash of a Meta user ID.
- * Minimizes retained PII in storage and database while maintaining idempotency.
+ * Creates a keyed non-reversible HMAC-SHA256 hash of a Meta user ID.
+ * Prevents dictionary and rainbow-table precomputation against numeric Meta ASUIDs.
+ * Uses dedicated META_DELETION_HASH_SECRET (or falls back securely to server META_APP_SECRET).
  */
-export function hashUserId(userId: string): string {
-  return crypto.createHash("sha256").update(userId.trim()).digest("hex");
+export function hashUserId(userId: string, secretOverride?: string): string {
+  const cleanId = userId.trim();
+  const secret =
+    secretOverride ||
+    process.env.META_DELETION_HASH_SECRET?.trim() ||
+    process.env.META_APP_SECRET?.trim();
+
+  if (secret) {
+    return crypto.createHmac("sha256", secret).update(cleanId).digest("hex");
+  }
+
+  return crypto.createHash("sha256").update(cleanId).digest("hex");
+}
+
+/**
+ * Checks if a deletion record matches a given user ID,
+ * supporting current HMAC-SHA256, legacy SHA-256, and raw user IDs.
+ */
+export function matchesUserId(
+  record: MetaDeletionRecord,
+  userId: string,
+  secretOverride?: string
+): boolean {
+  const cleanId = userId.trim();
+  const currentHash = hashUserId(cleanId, secretOverride);
+  if (record.userIdHash && record.userIdHash === currentHash) return true;
+
+  // Backwards compatibility check with plain SHA-256
+  const fallbackSha256 = crypto.createHash("sha256").update(cleanId).digest("hex");
+  if (record.userIdHash && record.userIdHash === fallbackSha256) return true;
+
+  // Backwards compatibility check with raw userId
+  if (record.userId && record.userId === cleanId) return true;
+
+  return false;
 }
 
 /**
@@ -602,32 +637,164 @@ export async function recordAndExecuteMetaDeletion(
   const executionPromise = (async () => {
     const records = await loadDeletionsFromStore();
 
-    // IDEMPOTENCY: Check if request for this user was already processed
-    const existing = records.find(
-      (r) =>
-        (r.userIdHash && r.userIdHash === userIdHash) ||
-        (r.userId && r.userId === userId)
-    );
-    if (existing) {
+    // 1. In-memory / file store check (supporting current HMAC-SHA256, legacy SHA-256, or raw userId)
+    const existingMemory = records.find((r) => matchesUserId(r, userId));
+    if (existingMemory && existingMemory.status === "completed") {
       console.log(
-        `[meta_data_deletion] Idempotent hit: Deletion request for user hash ${userIdHash.substring(0, 8)}... already processed. Re-using confirmation code ${existing.confirmationCode}.`
+        `[meta_data_deletion] Idempotent hit: Deletion request for user hash ${userIdHash.substring(0, 8)}... already completed. Re-using confirmation code ${existingMemory.confirmationCode}.`
       );
       return {
-        confirmationCode: existing.confirmationCode,
+        confirmationCode: existingMemory.confirmationCode,
         isRepeat: true,
-        record: existing,
+        record: existingMemory,
       };
     }
 
+    // 2. Database-backed durable claim & lease check (cross-instance safe on Vercel)
+    const supabase = getSupabaseClient();
+    let existingDbRow: any = null;
+
+    if (supabase) {
+      try {
+        const { data: dbRows, error: selectErr } = await supabase
+          .from("meta_data_deletion_requests")
+          .select("*")
+          .eq("user_id_hash", userIdHash)
+          .order("requested_at", { ascending: false });
+
+        if (!selectErr && Array.isArray(dbRows) && dbRows.length > 0) {
+          existingDbRow = dbRows[0];
+          const nowMs = Date.now();
+          const lockMs = existingDbRow.locked_until ? new Date(existingDbRow.locked_until).getTime() : 0;
+          const isLeaseActive = lockMs > nowMs;
+
+          // A) If already completed in DB, return existing confirmation code (Idempotent)
+          if (existingDbRow.status === "completed") {
+            console.log(
+              `[meta_data_deletion] DB Idempotent hit for user hash ${userIdHash.substring(0, 8)}... Confirmation code: ${existingDbRow.confirmation_code}`
+            );
+            const dbRecord: MetaDeletionRecord = {
+              confirmationCode: existingDbRow.confirmation_code,
+              userIdHash: existingDbRow.user_id_hash || userIdHash,
+              userId: null,
+              status: "completed",
+              requestedAt: existingDbRow.requested_at,
+              completedAt: existingDbRow.completed_at,
+              lockedUntil: null,
+              source: existingDbRow.details?.source || "meta_callback",
+              details: existingDbRow.details || {},
+            };
+            return {
+              confirmationCode: existingDbRow.confirmation_code,
+              isRepeat: true,
+              record: dbRecord,
+            };
+          }
+
+          // B) If actively processing on another instance with valid lease (< 5 min), yield
+          if (existingDbRow.status === "processing" && isLeaseActive) {
+            console.log(
+              `[meta_data_deletion] Active lease held by another instance for user hash ${userIdHash.substring(0, 8)}... Yielding.`
+            );
+            const dbRecord: MetaDeletionRecord = {
+              confirmationCode: existingDbRow.confirmation_code,
+              userIdHash: existingDbRow.user_id_hash || userIdHash,
+              userId: null,
+              status: "processing",
+              requestedAt: existingDbRow.requested_at,
+              completedAt: null,
+              lockedUntil: existingDbRow.locked_until,
+              source: existingDbRow.details?.source || "meta_callback",
+              details: existingDbRow.details || {},
+            };
+            return {
+              confirmationCode: existingDbRow.confirmation_code,
+              isRepeat: true,
+              record: dbRecord,
+            };
+          }
+
+          // C) If failed, or lease expired (> 5 min / crashed invocation), reclaim lease and retry!
+          const newLease = new Date(nowMs + 5 * 60 * 1000).toISOString();
+          await supabase
+            .from("meta_data_deletion_requests")
+            .update({
+              status: "processing",
+              locked_until: newLease,
+            })
+            .eq("id", existingDbRow.id);
+        }
+      } catch (err) {
+        console.warn("[meta_data_deletion] Supabase lease check warning:", err);
+      }
+    }
+
     // Generate unique strictly alphanumeric confirmation code (uppercase base36)
-    const confirmationCode = generateAlphanumericConfirmationCode(32);
+    // Reuse existing code if we are retrying an existing uncompleted DB row
+    const confirmationCode =
+      existingDbRow?.confirmation_code || generateAlphanumericConfirmationCode(32);
     const now = new Date().toISOString();
+    const leaseExpiry = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const isTest = isTestIdentity(userId);
+
+    // Initial atomic claim in database if no row existed yet
+    if (supabase && !existingDbRow) {
+      try {
+        const { error: insertErr } = await supabase.from("meta_data_deletion_requests").insert([
+          {
+            confirmation_code: confirmationCode,
+            user_id_hash: userIdHash,
+            status: "processing",
+            requested_at: now,
+            completed_at: null,
+            locked_until: leaseExpiry,
+            details: {
+              scope: isTest ? "elvaveo_social_media_manager_test" : "elvaveo_social_media_manager",
+              isTestRequest: isTest,
+              source: "meta_data_deletion_callback",
+              ...metadata,
+            },
+          },
+        ]);
+
+        // If another instance inserted simultaneously (PostgreSQL unique violation 23505)
+        if (insertErr && (insertErr.code === "23505" || insertErr.message?.includes("duplicate"))) {
+          const { data: raceRow } = await supabase
+            .from("meta_data_deletion_requests")
+            .select("*")
+            .eq("user_id_hash", userIdHash)
+            .maybeSingle();
+
+          if (raceRow) {
+            console.log(
+              `[meta_data_deletion] Race condition resolved: yielding to winning instance for user hash ${userIdHash.substring(0, 8)}...`
+            );
+            return {
+              confirmationCode: raceRow.confirmation_code,
+              isRepeat: true,
+              record: {
+                confirmationCode: raceRow.confirmation_code,
+                userIdHash: raceRow.user_id_hash || userIdHash,
+                userId: null,
+                status: raceRow.status,
+                requestedAt: raceRow.requested_at,
+                completedAt: raceRow.completed_at,
+                lockedUntil: raceRow.locked_until,
+                source: raceRow.details?.source || "meta_callback",
+                details: raceRow.details || {},
+              },
+            };
+          }
+        }
+      } catch (err) {
+        console.warn("[meta_data_deletion] Supabase initial atomic claim warning:", err);
+      }
+    }
 
     let status: MetaDeletionStatus = "completed";
     let deletedEntities: string[] = [];
     let errorDetails: string | undefined;
-
-    const isTest = isTestIdentity(userId);
 
     try {
       const result = await executeScopedSocialMediaDeletion(userId, isTest);
@@ -641,6 +808,8 @@ export async function recordAndExecuteMetaDeletion(
       );
     }
 
+    const completedAt = status === "completed" ? now : null;
+
     const newRecord: MetaDeletionRecord = {
       confirmationCode,
       userIdHash,
@@ -648,7 +817,8 @@ export async function recordAndExecuteMetaDeletion(
       userId: null,
       status,
       requestedAt: now,
-      completedAt: status === "completed" ? now : null,
+      completedAt,
+      lockedUntil: null,
       source: "meta_data_deletion_callback",
       details: {
         scope: isTest ? "elvaveo_social_media_manager_test" : "elvaveo_social_media_manager",
@@ -662,21 +832,20 @@ export async function recordAndExecuteMetaDeletion(
     records.unshift(newRecord);
     await persistDeletionsToStore(records);
 
-    const supabase = getSupabaseClient();
+    // Finalize record in Supabase database
     if (supabase) {
       try {
-        await supabase.from("meta_data_deletion_requests").insert([
-          {
-            confirmation_code: confirmationCode,
-            user_id_hash: userIdHash,
-            status,
-            requested_at: now,
-            completed_at: status === "completed" ? now : null,
-            details: newRecord.details,
-          },
-        ]);
+        await supabase.from("meta_data_deletion_requests").upsert({
+          confirmation_code: confirmationCode,
+          user_id_hash: userIdHash,
+          status,
+          requested_at: now,
+          completed_at: completedAt,
+          locked_until: null,
+          details: newRecord.details,
+        });
       } catch (err) {
-        console.warn("[meta_data_deletion] Supabase table insert warning:", err);
+        console.warn("[meta_data_deletion] Supabase finalize upsert warning:", err);
       }
     }
 
