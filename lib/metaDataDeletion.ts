@@ -455,6 +455,36 @@ async function executeScopedSocialMediaDeletion(userId: string): Promise<{
     deletedEntities.push("user_oauth_tokens");
   } catch {}
 
+  // 2. Purge Supabase Storage if configured
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.storage.from("uploads").remove([
+        `social/${userId}.json`,
+        `social/meta_tokens_${userId}.json`,
+        `social/meta_cache_${userId}.json`,
+      ]);
+      deletedEntities.push("storage_oauth_tokens");
+    } catch {}
+
+    // 3. Purge from any Supabase tables if connected accounts are tracked in DB
+    try {
+      await supabase
+        .from("meta_connected_accounts")
+        .delete()
+        .eq("meta_user_id", userId);
+      deletedEntities.push("db_connected_accounts");
+    } catch {}
+
+    try {
+      await supabase
+        .from("meta_user_tokens")
+        .delete()
+        .eq("meta_user_id", userId);
+      deletedEntities.push("db_user_tokens");
+    } catch {}
+  }
+
   if (deletedEntities.length === 0) {
     deletedEntities.push("meta_access_tokens", "meta_profile_data", "social_media_insights");
   }

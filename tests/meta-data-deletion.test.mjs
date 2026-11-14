@@ -227,6 +227,28 @@ test("Handler POST: Missing signed_request returns 400 Bad Request", async () =>
   assert.ok(response.body.error);
 });
 
+test("Handler POST: Missing server META_APP_SECRET fails securely with 503", async () => {
+  const originalSecret = process.env.META_APP_SECRET;
+  delete process.env.META_APP_SECRET;
+
+  const signedRequest = createMetaSignedRequest(
+    { algorithm: "HMAC-SHA256", user_id: "test_secret_user" },
+    TEST_SECRET
+  );
+
+  const req = new Request("https://elvaveo.com/api/meta/data-deletion", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `signed_request=${encodeURIComponent(signedRequest)}`,
+  });
+
+  const response = await handleMetaDataDeletionPost(req);
+  assert.equal(response.status, 503);
+  assert.ok(response.body.error.includes("Meta App Secret is not configured"));
+
+  process.env.META_APP_SECRET = originalSecret;
+});
+
 test("Handler POST: Invalid signature returns 400 Bad Request", async () => {
   const signedRequest = createMetaSignedRequest(
     { algorithm: "HMAC-SHA256", user_id: "12345" },
